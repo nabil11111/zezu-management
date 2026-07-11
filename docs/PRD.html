@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>ZEZU Operations — Proposal</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&family=Barlow+Condensed:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --red: #ea2526;
+    --red-deep: #c41f20;
+    --gold: #e8c882;
+    --black: #080808;
+    --panel: #161616;
+    --paper: #f2ede6;
+    --ink: #111111;
+    --muted: #6f6a63;
+    --line: #ddd5c9;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: #fff; }
+  body { font-family: "DM Sans", sans-serif; color: var(--ink); font-size: 10.5pt; line-height: 1.65; }
+  @page { size: A4; margin: 0; }
+  .page {
+    width: 210mm; height: 296mm; overflow: hidden;
+    page-break-after: always; position: relative;
+    background: var(--paper); padding: 20mm 18mm;
+  }
+  .page.dark { background: var(--black); color: var(--paper); }
+  .page:last-child { page-break-after: auto; }
+
+  h1, h2, h3, .disp { font-family: "Barlow Condensed", sans-serif; text-transform: uppercase; letter-spacing: .01em; }
+  .zh { font-family: "Noto Serif SC", serif; }
+
+  .kicker { font-size: 8.5pt; font-weight: 700; letter-spacing: .32em; text-transform: uppercase; color: var(--red); margin-bottom: 4mm; font-family: "DM Sans", sans-serif; }
+  .dark .kicker { color: var(--gold); }
+  h2 { font-size: 30pt; font-weight: 800; line-height: .95; margin-bottom: 7mm; }
+  .lede { font-size: 12.5pt; font-weight: 300; line-height: 1.6; max-width: 150mm; }
+  p + p { margin-top: 3.5mm; }
+  .accent { color: var(--red); }
+  .gold { color: var(--gold); }
+
+  .pagenum { position: absolute; bottom: 10mm; right: 18mm; font-size: 8pt; letter-spacing: .25em; color: var(--muted); font-weight: 700; }
+  .footbrand { position: absolute; bottom: 10mm; left: 18mm; font-size: 8pt; letter-spacing: .25em; color: var(--muted); font-weight: 700; text-transform: uppercase; }
+
+  /* ── cover ── */
+  .cover { display: flex; flex-direction: column; justify-content: space-between; }
+  .cover .rule { height: 3px; background: var(--red); width: 42mm; margin: 8mm 0; }
+  .cover h1 { font-size: 64pt; font-weight: 800; line-height: .92; color: var(--paper); }
+  .cover .zh-mark { font-size: 13pt; color: var(--gold); letter-spacing: .5em; margin-top: 6mm; }
+  .cover .meta { display: flex; gap: 14mm; border-top: 1px solid #2a2a2a; padding-top: 6mm; }
+  .cover .meta div { font-size: 8.5pt; letter-spacing: .18em; text-transform: uppercase; color: #9a948b; }
+  .cover .meta b { display: block; color: var(--paper); font-size: 10pt; letter-spacing: .1em; margin-top: 1mm; }
+  .badge { display: inline-block; border: 1.5px solid var(--gold); color: var(--gold); font-size: 8.5pt; font-weight: 700; letter-spacing: .28em; text-transform: uppercase; padding: 2mm 5mm; }
+
+  /* ── modules ── */
+  .mod { border: 1.5px solid var(--line); background: #fff; padding: 7mm 8mm 6.5mm; margin-bottom: 6mm; }
+  .mod .num { font-family: "Barlow Condensed", sans-serif; font-weight: 800; font-size: 13pt; color: var(--red); letter-spacing: .05em; }
+  .mod h3 { font-size: 17pt; font-weight: 700; margin: 1mm 0 2.5mm; }
+  .mod .win { margin-top: 3.5mm; padding-top: 3mm; border-top: 1px dashed var(--line); font-size: 9.5pt; color: var(--muted); }
+  .mod .win b { color: var(--red-deep); font-weight: 700; text-transform: uppercase; font-size: 8pt; letter-spacing: .2em; margin-right: 2mm; }
+
+  /* ── day timeline ── */
+  .slot { display: flex; gap: 6mm; margin-bottom: 5.5mm; }
+  .slot .t { flex: 0 0 24mm; font-family: "Barlow Condensed", sans-serif; font-weight: 800; font-size: 15pt; color: var(--red); }
+  .slot .body b { display: block; font-weight: 700; }
+  .slot .body { border-left: 2px solid var(--line); padding-left: 6mm; }
+
+  /* ── clock-in steps ── */
+  .steps { display: flex; gap: 5mm; margin: 6mm 0; }
+  .step { flex: 1; background: #fff; border: 1.5px solid var(--line); border-top: 3px solid var(--red); padding: 5mm; }
+  .step .n { font-family: "Barlow Condensed", sans-serif; font-weight: 800; font-size: 20pt; color: var(--gold); -webkit-text-stroke: .6px var(--ink); }
+  .step b { display: block; font-size: 10.5pt; margin: 1.5mm 0 1mm; }
+  .step p { font-size: 9pt; color: var(--muted); line-height: 1.5; }
+
+  /* ── phases ── */
+  .phase { display: flex; gap: 7mm; padding: 5mm 0; border-bottom: 1px solid var(--line); }
+  .phase:last-child { border-bottom: none; }
+  .phase .pn { flex: 0 0 20mm; font-family: "Barlow Condensed", sans-serif; font-weight: 800; font-size: 24pt; color: var(--red); line-height: 1; }
+  .phase h3 { font-size: 14pt; font-weight: 700; }
+  .phase .get { font-size: 9pt; color: var(--muted); margin-top: 1.5mm; }
+  .phase .get b { color: var(--red-deep); text-transform: uppercase; letter-spacing: .18em; font-size: 7.5pt; margin-right: 2mm; }
+
+  ul.clean { list-style: none; }
+  ul.clean li { padding-left: 6mm; position: relative; margin-bottom: 2.5mm; }
+  ul.clean li::before { content: "✦"; position: absolute; left: 0; color: var(--red); font-size: 9pt; }
+  .dark ul.clean li::before { color: var(--gold); }
+
+  .pull { border-left: 3px solid var(--gold); background: #fff; padding: 5mm 7mm; margin: 6mm 0; font-size: 11.5pt; font-weight: 500; }
+
+  .two-col { display: flex; gap: 8mm; }
+  .two-col > div { flex: 1; }
+</style>
+</head>
+<body>
+
+<!-- ─────────── COVER ─────────── -->
+<div class="page dark cover">
+  <div>
+    <span class="badge">Proposal · July 2026</span>
+    <div class="rule"></div>
+    <h1>One screen<br />for the<br />whole shop<span class="accent">.</span></h1>
+    <p class="zh zh-mark">运营 · 一目了然</p>
+  </div>
+  <div>
+    <p style="max-width:120mm; color:#b8b1a6; font-weight:300; margin-bottom:10mm;">
+      A management dashboard made for ZEZU — the people, the stock, the menu, the sales
+      and the shop floor of all three sites, live in one place, built to look and feel
+      like the brand you've already made people love.
+    </p>
+    <div class="meta">
+      <div>Prepared for <b>ZEZU — The Modern Chinese</b></div>
+      <div>Sites <b>Lodge Lane · Anfield · Wallasey</b></div>
+      <div>Prepared by <b>Polarity</b></div>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────── THE IDEA ─────────── -->
+<div class="page">
+  <p class="kicker">— 01 · Why this exists</p>
+  <h2>Three shops.<br />One honest picture.</h2>
+  <p class="lede">
+    Right now the answers live in too many places. Who turned up today sits in a group chat.
+    Stock lives in someone's head and a notebook by the fryer. Sales are three platform
+    dashboards and a till roll. Salaries are an end-of-month headache built on memory.
+  </p>
+  <p style="margin-top:5mm; max-width:150mm;">
+    None of that is broken because anyone is careless — it's what happens when a brand grows
+    faster than its paperwork. ZEZU went from an idea to three sites and 20k+ happy customers;
+    the tools behind the counter never got the same upgrade as the food.
+  </p>
+  <div class="pull">
+    We're proposing one private dashboard — on the office screen, the manager's phone,
+    your phone — that always knows: <span class="accent">who's in, what's selling,
+    what's running low, and what everyone is owed.</span>
+  </div>
+  <p style="max-width:150mm;">
+    It's not software for software's sake. Every screen in this proposal earns its place by
+    replacing a group chat, a notebook, a spreadsheet, or a guess. If it doesn't save a
+    manager time on a Friday night, it doesn't go in.
+  </p>
+  <p style="margin-top:5mm; max-width:150mm;">
+    The pages that follow walk through the six things it will do, what a normal day feels
+    like with it running, and exactly how we'd build and roll it out across Lodge Lane,
+    Anfield and Wallasey — starting small, proving it in one shop, then switching on the rest.
+  </p>
+  <div class="footbrand">Zezu Operations — Proposal</div>
+  <div class="pagenum">02</div>
+</div>
+
+<!-- ─────────── MODULES 1-3 ─────────── -->
+<div class="page">
+  <p class="kicker">— 02 · What it does</p>
+  <h2>The six modules</h2>
+
+  <div class="mod">
+    <span class="num">01 / PEOPLE</span>
+    <h3>Every person, sorted from day one</h3>
+    <p>A profile for every member of staff across the three sites: role, site, contact,
+    documents and pay rate. New hires get a ready-made onboarding checklist — documents in,
+    training videos watched, trial shift done — so nobody starts a Friday shift half-set-up.
+    Salaries aren't typed in from memory: they're calculated from the verified hours each
+    person actually worked (more on that on the clock-in page).</p>
+    <div class="win"><b>The win</b> Month-end pay takes minutes, not an evening — and every number can be traced back to a real shift.</div>
+  </div>
+
+  <div class="mod">
+    <span class="num">02 / STOCK</span>
+    <h3>Know tonight what you'll run out of tomorrow</h3>
+    <p>At close, each site logs the day's usage in under a minute — tap the item, tap how much.
+    The dashboard keeps the running level of everything from chicken to chilli jam, flags
+    what's getting low, and turns the flags into a ready-to-send order list for each supplier.
+    No more discovering at 6pm that the Salt &amp; Pepper Chips are off the menu.</p>
+    <div class="win"><b>The win</b> Ordering stops being a memory game — and you can finally see which site uses what, and at what pace.</div>
+  </div>
+
+  <div class="mod">
+    <span class="num">03 / MENU</span>
+    <h3>Every dish, on film</h3>
+    <p>Each menu item gets its own short video — the plate, the portion, the finish — living
+    inside the dashboard next to its recipe notes. New cooks train from it, every site plates
+    the Dragon Chicken the same way, and you quietly build a library of mouth-watering footage
+    the brand can reuse for socials and the website. (Filming is what we do — we'll shoot these with you.)</p>
+    <div class="win"><b>The win</b> Consistency across three kitchens, plus a content library most takeaways would kill for.</div>
+  </div>
+
+  <div class="footbrand">Zezu Operations — Proposal</div>
+  <div class="pagenum">03</div>
+</div>
+
+<!-- ─────────── MODULES 4-6 ─────────── -->
+<div class="page">
+  <p class="kicker">— 02 · What it does (continued)</p>
+  <h2>Sales, the floor,<br />and the clock</h2>
+
+  <div class="mod">
+    <span class="num">04 / DAILY SALES</span>
+    <h3>Uber · takeaway · dine-in, side by side</h3>
+    <p>Each site enters its day in three numbers — Uber, takeaway over the counter, dine-in.
+    The dashboard does the rest: today vs last week, site vs site, the channel mix, the best
+    and worst days on record. You'll see in one glance whether a quiet Tuesday at Anfield is
+    the weather or a trend — and which channel is actually growing.</p>
+    <div class="win"><b>The win</b> Decisions about hours, staffing and promos get made on numbers, not vibes.</div>
+  </div>
+
+  <div class="mod">
+    <span class="num">05 / LIVE VIEW</span>
+    <h3>A miniature of the shop, in your pocket</h3>
+    <p>The dashboard's home screen is a little living picture of ZEZU right now: each of the
+    three sites as a card — who's clocked in on shift at this minute, today's takings so far,
+    any stock flags raised. Wherever you are, ten seconds tells you the whole business is
+    running as it should. When something's off — a shift with no one clocked in, a site that
+    hasn't logged its day — it's visibly off.</p>
+    <div class="win"><b>The win</b> You stop ringing shops to ask "everything alright?" — the answer is already on your phone.</div>
+  </div>
+
+  <div class="mod">
+    <span class="num">06 / CLOCK-IN</span>
+    <h3>Scan in, verified by the manager, paid to the minute</h3>
+    <p>A ZEZU-branded QR poster by the door of each site. Staff scan it on their own phone to
+    clock in and out; the shift manager gets a one-tap verification, so nobody can scan in
+    from their sofa. Those verified hours build each person's timesheet automatically — and
+    that timesheet is exactly what the People module uses to calculate salaries.</p>
+    <div class="win"><b>The win</b> Hours are fair and provable in both directions — staff trust the count, and so do you.</div>
+  </div>
+
+  <div class="footbrand">Zezu Operations — Proposal</div>
+  <div class="pagenum">04</div>
+</div>
+
+<!-- ─────────── CLOCK-IN FLOW + A DAY ─────────── -->
+<div class="page">
+  <p class="kicker">— 03 · The UX, on a real day</p>
+  <h2>How clocking in feels</h2>
+  <div class="steps">
+    <div class="step"><span class="n">1</span><b>Scan</b><p>Aisha arrives at Lodge Lane, scans the poster by the door with her phone. No app to install — it just opens.</p></div>
+    <div class="step"><span class="n">2</span><b>Confirm</b><p>Her name and the time appear. One tap — "Start shift." It takes less time than tying an apron.</p></div>
+    <div class="step"><span class="n">3</span><b>Verify</b><p>The shift manager's screen shows "Aisha — clock-in, 16:58". One tap to confirm she's actually here.</p></div>
+    <div class="step"><span class="n">4</span><b>Paid right</b><p>At month end her verified hours × her rate are already added up. Nothing typed, nothing argued.</p></div>
+  </div>
+
+  <h2 style="margin-top:8mm;">…and how a day runs</h2>
+  <div class="slot"><span class="t">10:45</span><div class="body"><b>Open-up, Wallasey.</b><p>The opener scans in; the manager verifies. Your live view flips Wallasey to "open — 2 on shift".</p></div></div>
+  <div class="slot"><span class="t">12:30</span><div class="body"><b>Delivery arrives.</b><p>New stock is logged in as it comes off the van — thirty seconds, and the running levels update.</p></div></div>
+  <div class="slot"><span class="t">17:00</span><div class="body"><b>Friday rush builds.</b><p>Evening crew scan in one by one. You watch all three sites staff up from your sofa — no calls made.</p></div></div>
+  <div class="slot"><span class="t">22:40</span><div class="body"><b>Close-down.</b><p>Each manager logs the day's usage and the three sales numbers. Two minutes each, then lights off.</p></div></div>
+  <div class="slot"><span class="t">23:00</span><div class="body"><b>Your phone.</b><p>The whole day in one card per site: takings by channel, hours worked, and tomorrow's order list already drafted.</p></div></div>
+
+  <div class="footbrand">Zezu Operations — Proposal</div>
+  <div class="pagenum">05</div>
+</div>
+
+<!-- ─────────── DESIGN + TRUST ─────────── -->
+<div class="page dark">
+  <p class="kicker">— 04 · The look &amp; the trust</p>
+  <h2 style="color:var(--paper);">It will feel like Zezu,<br />not like software</h2>
+  <p class="lede" style="color:#c9c2b6;">
+    We're building this on your design language — the red, the gold, the bold condensed type,
+    the attitude. When a new hire opens their onboarding, or a manager checks the live view,
+    it should feel like the same brand that made the shop worth queuing at.
+  </p>
+  <div class="two-col" style="margin-top:9mm;">
+    <div>
+      <h3 style="color:var(--gold); font-size:14pt; margin-bottom:3mm;">Designed for real hands</h3>
+      <ul class="clean" style="color:#c9c2b6;">
+        <li>Phone-first for staff — scan, tap, done, with wet-hands-sized buttons.</li>
+        <li>Big-screen mode for the office — the live view runs happily on a wall display.</li>
+        <li>Every daily task designed to take under two minutes, timed with your team.</li>
+        <li>English-plain labels; no jargon, no manuals needed.</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="color:var(--gold); font-size:14pt; margin-bottom:3mm;">Private &amp; accountable</h3>
+      <ul class="clean" style="color:#c9c2b6;">
+        <li>Every person gets their own sign-in — staff, managers and owners see different things.</li>
+        <li>Staff see their shifts and hours; managers run their site; owners see everything.</li>
+        <li>Every change is logged with a name and a time — quiet accountability, no drama.</li>
+        <li>Someone leaves? One tap and their access is gone that second.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="zh" style="color:var(--gold); letter-spacing:.4em; margin-top:12mm; font-size:11pt;">正宗 · 现代 · 利物浦</p>
+  <div class="footbrand" style="color:#6f6a63;">Zezu Operations — Proposal</div>
+  <div class="pagenum" style="color:#6f6a63;">06</div>
+</div>
+
+<!-- ─────────── PLAN ─────────── -->
+<div class="page">
+  <p class="kicker">— 05 · How we'll tackle it</p>
+  <h2>Small start, fast proof,<br />then all three sites</h2>
+
+  <div class="phase"><span class="pn">P1</span><div>
+    <h3>Walk the shops &amp; design</h3>
+    <p>We shadow a real shift at Lodge Lane, map how stock, staff and sales actually move, then
+    design every screen in your brand.</p>
+    <p class="get"><b>You get</b> Clickable designs of the whole dashboard to approve before anything is built.</p>
+  </div></div>
+
+  <div class="phase"><span class="pn">P2</span><div>
+    <h3>The core: people, clock-in, sales</h3>
+    <p>The backbone first — staff profiles, the QR clock-in with manager verification, daily
+    sales entry, and the live view fed by both.</p>
+    <p class="get"><b>You get</b> A working dashboard your managers can genuinely run a day on.</p>
+  </div></div>
+
+  <div class="phase"><span class="pn">P3</span><div>
+    <h3>Stock &amp; the menu on film</h3>
+    <p>Daily usage logging, levels and order lists go live — and we come in and film the full
+    menu, dish by dish, for training and the brand library.</p>
+    <p class="get"><b>You get</b> The ordering headache gone, and every dish captured properly on video.</p>
+  </div></div>
+
+  <div class="phase"><span class="pn">P4</span><div>
+    <h3>Pilot at Lodge Lane</h3>
+    <p>Two weeks with the real crew. We watch where people hesitate, fix it that week, and tune
+    salaries against a real month-end.</p>
+    <p class="get"><b>You get</b> Proof — one site running entirely on the dashboard, staff onboard and comfortable.</p>
+  </div></div>
+
+  <div class="phase"><span class="pn">P5</span><div>
+    <h3>All three sites, then sharpen</h3>
+    <p>Anfield and Wallasey switch on with posters, sign-ins and a short hands-on session per
+    crew. Then we stay close, watching how it's used and refining.</p>
+    <p class="get"><b>You get</b> The whole of ZEZU on one screen — and a partner who keeps making it better.</p>
+  </div></div>
+
+  <div class="footbrand">Zezu Operations — Proposal</div>
+  <div class="pagenum">07</div>
+</div>
+
+<!-- ─────────── WHAT WE NEED / CLOSE ─────────── -->
+<div class="page dark cover">
+  <div>
+    <p class="kicker">— 06 · From your side</p>
+    <h2 style="color:var(--paper);">All we need to start</h2>
+    <ul class="clean" style="color:#c9c2b6; max-width:140mm;">
+      <li>The staff list and pay rates for each site — even rough, we'll tidy together.</li>
+      <li>The menu as it stands, and your supplier list for stock.</li>
+      <li>One "champion" manager per site to sanity-check what we design.</li>
+      <li>An hour with us during a Friday rush — the dashboard should be designed where it'll be used.</li>
+    </ul>
+  </div>
+  <div>
+    <div class="rule"></div>
+    <h1 style="font-size:40pt;">One bite is never enough.<br /><span class="gold">One screen is.</span></h1>
+    <p style="color:#9a948b; margin-top:8mm; font-size:9.5pt; letter-spacing:.15em; text-transform:uppercase;">Prepared by Polarity · hello@polarity.media · July 2026</p>
+  </div>
+</div>
+
+</body>
+</html>
