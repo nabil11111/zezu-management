@@ -151,7 +151,7 @@ function OutcomeView({
       );
     case "opened_and_clocked_in":
       return (
-        <button onClick={onDone} className="flex w-full flex-col items-center gap-2 text-center">
+        <button onClick={onDone} className="flex w-full flex-col items-center gap-3 text-center">
           <p className="font-display text-4xl uppercase leading-[0.95] text-pop md:text-5xl">
             Shop&apos;s open.
           </p>

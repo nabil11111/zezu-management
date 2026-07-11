@@ -73,6 +73,12 @@ function RootShell({ children }: { children: React.ReactNode }) {
     <html lang="en" className="dark">
       <head>
         <HeadContent />
+        {/* Applies the saved theme before first paint — no light/dark flash. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(localStorage.getItem("zezu-theme")==="light"){var c=document.documentElement.classList;c.remove("dark");c.add("light")}}catch(e){}`,
+          }}
+        />
       </head>
       <body>
         {children}

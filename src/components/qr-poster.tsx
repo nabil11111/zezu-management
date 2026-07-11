@@ -13,7 +13,7 @@ import { ZezuLogo } from "@/components/zezu-logo";
  */
 export function QrPoster({ locationName, clockUrl }: { locationName: string; clockUrl: string }) {
   return (
-    <div className="qr-poster relative mx-auto flex aspect-[210/297] w-full max-w-[540px] flex-col items-center bg-background px-8 py-10 text-center sm:px-10 sm:py-12">
+    <div className="qr-poster dark relative mx-auto flex aspect-[210/297] w-full max-w-[540px] flex-col items-center bg-background px-8 py-10 text-center text-foreground sm:px-10 sm:py-12">
       {/* corner marks — the poster frame, same device as the login screen */}
       <span className="pointer-events-none absolute left-5 top-5 h-8 w-8 border-l-2 border-t-2 border-pop" />
       <span className="pointer-events-none absolute right-5 top-5 h-8 w-8 border-r-2 border-t-2 border-pop" />

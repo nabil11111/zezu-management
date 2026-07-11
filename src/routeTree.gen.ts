@@ -13,10 +13,12 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as AuthedIndexRouteImport } from './routes/_authed.index'
 import { Route as ClockQrTokenRouteImport } from './routes/clock.$qrToken'
+import { Route as AuthedWarehouseRouteImport } from './routes/_authed.warehouse'
 import { Route as AuthedStockRouteImport } from './routes/_authed.stock'
 import { Route as AuthedShiftsRouteImport } from './routes/_authed.shifts'
 import { Route as AuthedSettingsRouteImport } from './routes/_authed.settings'
 import { Route as AuthedSalesRouteImport } from './routes/_authed.sales'
+import { Route as AuthedOrdersRouteImport } from './routes/_authed.orders'
 import { Route as AuthedMyRouteImport } from './routes/_authed.my'
 import { Route as AuthedMenuRouteImport } from './routes/_authed.menu'
 import { Route as AuthedPeopleIndexRouteImport } from './routes/_authed.people.index'
@@ -41,6 +43,11 @@ const ClockQrTokenRoute = ClockQrTokenRouteImport.update({
   path: '/clock/$qrToken',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthedWarehouseRoute = AuthedWarehouseRouteImport.update({
+  id: '/warehouse',
+  path: '/warehouse',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedStockRoute = AuthedStockRouteImport.update({
   id: '/stock',
   path: '/stock',
@@ -59,6 +66,11 @@ const AuthedSettingsRoute = AuthedSettingsRouteImport.update({
 const AuthedSalesRoute = AuthedSalesRouteImport.update({
   id: '/sales',
   path: '/sales',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedOrdersRoute = AuthedOrdersRouteImport.update({
+  id: '/orders',
+  path: '/orders',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedMyRoute = AuthedMyRouteImport.update({
@@ -87,10 +99,12 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/menu': typeof AuthedMenuRoute
   '/my': typeof AuthedMyRoute
+  '/orders': typeof AuthedOrdersRoute
   '/sales': typeof AuthedSalesRoute
   '/settings': typeof AuthedSettingsRoute
   '/shifts': typeof AuthedShiftsRoute
   '/stock': typeof AuthedStockRoute
+  '/warehouse': typeof AuthedWarehouseRoute
   '/clock/$qrToken': typeof ClockQrTokenRoute
   '/people/$memberId': typeof AuthedPeopleMemberIdRoute
   '/people/': typeof AuthedPeopleIndexRoute
@@ -99,10 +113,12 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/menu': typeof AuthedMenuRoute
   '/my': typeof AuthedMyRoute
+  '/orders': typeof AuthedOrdersRoute
   '/sales': typeof AuthedSalesRoute
   '/settings': typeof AuthedSettingsRoute
   '/shifts': typeof AuthedShiftsRoute
   '/stock': typeof AuthedStockRoute
+  '/warehouse': typeof AuthedWarehouseRoute
   '/clock/$qrToken': typeof ClockQrTokenRoute
   '/': typeof AuthedIndexRoute
   '/people/$memberId': typeof AuthedPeopleMemberIdRoute
@@ -114,10 +130,12 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_authed/menu': typeof AuthedMenuRoute
   '/_authed/my': typeof AuthedMyRoute
+  '/_authed/orders': typeof AuthedOrdersRoute
   '/_authed/sales': typeof AuthedSalesRoute
   '/_authed/settings': typeof AuthedSettingsRoute
   '/_authed/shifts': typeof AuthedShiftsRoute
   '/_authed/stock': typeof AuthedStockRoute
+  '/_authed/warehouse': typeof AuthedWarehouseRoute
   '/clock/$qrToken': typeof ClockQrTokenRoute
   '/_authed/': typeof AuthedIndexRoute
   '/_authed/people/$memberId': typeof AuthedPeopleMemberIdRoute
@@ -130,10 +148,12 @@ export interface FileRouteTypes {
     | '/login'
     | '/menu'
     | '/my'
+    | '/orders'
     | '/sales'
     | '/settings'
     | '/shifts'
     | '/stock'
+    | '/warehouse'
     | '/clock/$qrToken'
     | '/people/$memberId'
     | '/people/'
@@ -142,10 +162,12 @@ export interface FileRouteTypes {
     | '/login'
     | '/menu'
     | '/my'
+    | '/orders'
     | '/sales'
     | '/settings'
     | '/shifts'
     | '/stock'
+    | '/warehouse'
     | '/clock/$qrToken'
     | '/'
     | '/people/$memberId'
@@ -156,10 +178,12 @@ export interface FileRouteTypes {
     | '/login'
     | '/_authed/menu'
     | '/_authed/my'
+    | '/_authed/orders'
     | '/_authed/sales'
     | '/_authed/settings'
     | '/_authed/shifts'
     | '/_authed/stock'
+    | '/_authed/warehouse'
     | '/clock/$qrToken'
     | '/_authed/'
     | '/_authed/people/$memberId'
@@ -202,6 +226,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClockQrTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authed/warehouse': {
+      id: '/_authed/warehouse'
+      path: '/warehouse'
+      fullPath: '/warehouse'
+      preLoaderRoute: typeof AuthedWarehouseRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/stock': {
       id: '/_authed/stock'
       path: '/stock'
@@ -228,6 +259,13 @@ declare module '@tanstack/react-router' {
       path: '/sales'
       fullPath: '/sales'
       preLoaderRoute: typeof AuthedSalesRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/orders': {
+      id: '/_authed/orders'
+      path: '/orders'
+      fullPath: '/orders'
+      preLoaderRoute: typeof AuthedOrdersRouteImport
       parentRoute: typeof AuthedRoute
     }
     '/_authed/my': {
@@ -264,10 +302,12 @@ declare module '@tanstack/react-router' {
 interface AuthedRouteChildren {
   AuthedMenuRoute: typeof AuthedMenuRoute
   AuthedMyRoute: typeof AuthedMyRoute
+  AuthedOrdersRoute: typeof AuthedOrdersRoute
   AuthedSalesRoute: typeof AuthedSalesRoute
   AuthedSettingsRoute: typeof AuthedSettingsRoute
   AuthedShiftsRoute: typeof AuthedShiftsRoute
   AuthedStockRoute: typeof AuthedStockRoute
+  AuthedWarehouseRoute: typeof AuthedWarehouseRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
   AuthedPeopleMemberIdRoute: typeof AuthedPeopleMemberIdRoute
   AuthedPeopleIndexRoute: typeof AuthedPeopleIndexRoute
@@ -276,10 +316,12 @@ interface AuthedRouteChildren {
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedMenuRoute: AuthedMenuRoute,
   AuthedMyRoute: AuthedMyRoute,
+  AuthedOrdersRoute: AuthedOrdersRoute,
   AuthedSalesRoute: AuthedSalesRoute,
   AuthedSettingsRoute: AuthedSettingsRoute,
   AuthedShiftsRoute: AuthedShiftsRoute,
   AuthedStockRoute: AuthedStockRoute,
+  AuthedWarehouseRoute: AuthedWarehouseRoute,
   AuthedIndexRoute: AuthedIndexRoute,
   AuthedPeopleMemberIdRoute: AuthedPeopleMemberIdRoute,
   AuthedPeopleIndexRoute: AuthedPeopleIndexRoute,

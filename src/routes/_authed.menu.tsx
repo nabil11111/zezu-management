@@ -81,7 +81,7 @@ function MenuItemFormFields({
   const categoryListId = useId();
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       <Field label="Dish name">
         <Input
           value={form.name}
@@ -89,7 +89,7 @@ function MenuItemFormFields({
           placeholder="Dragon Chicken"
         />
       </Field>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-4">
         <Field label="Category">
           <Input
             list={categoryListId}
@@ -133,14 +133,14 @@ function MenuItemFormFields({
           placeholder="https://…/dragon-chicken.jpg"
         />
       </Field>
-      <div className="flex items-center justify-between border-2 border-foreground/15 px-3 py-2.5">
+      <div className="flex items-center justify-between border-2 border-foreground/15 px-3 py-3">
         <Label>Bestseller</Label>
         <Switch
           checked={form.isBestseller}
           onCheckedChange={(v) => setForm((f) => ({ ...f, isBestseller: v }))}
         />
       </div>
-      <div className="flex items-center justify-between border-2 border-foreground/15 px-3 py-2.5">
+      <div className="flex items-center justify-between border-2 border-foreground/15 px-3 py-3">
         <Label>Published — visible to crew</Label>
         <Switch
           checked={form.published}
@@ -192,7 +192,7 @@ function toEmbedUrl(url: string): EmbedInfo {
 function VideoEmbed({ embed }: { embed: EmbedInfo }) {
   if (embed.kind === "iframe") {
     return (
-      <div className="aspect-video w-full overflow-hidden border-2 border-foreground bg-black">
+      <div className="aspect-video w-full overflow-hidden border-2 border-foreground bg-background">
         <iframe
           src={embed.src}
           className="h-full w-full"
@@ -207,7 +207,7 @@ function VideoEmbed({ embed }: { embed: EmbedInfo }) {
     return (
       <video
         controls
-        className="aspect-video w-full border-2 border-foreground bg-black"
+        className="aspect-video w-full border-2 border-foreground bg-background"
         src={embed.src}
       />
     );
@@ -329,7 +329,7 @@ function AddDishDialog({ categories }: { categories: string[] }) {
         </Button>
       </DialogTrigger>
       <DialogContent title="Add dish">
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
           <MenuItemFormFields form={form} setForm={setForm} categories={categories} />
           <Button disabled={busy} onClick={submit}>
             {busy ? "Adding…" : "Add to the menu"}
@@ -446,7 +446,7 @@ function DishCard({
               )}
               <div className="absolute left-2 top-2 flex flex-col gap-1">
                 {item.isBestseller ? (
-                  <Badge tone="pop" className="border-foreground bg-gold text-ink">
+                  <Badge tone="pop" className="border-foreground bg-gold text-foreground">
                     Bestseller
                   </Badge>
                 ) : null}
@@ -457,7 +457,7 @@ function DishCard({
                 </Badge>
               ) : null}
             </div>
-            <div className="border-t-2 border-foreground/15 px-3 py-2.5">
+            <div className="border-t-2 border-foreground/15 px-3 py-3">
               <p className="truncate font-display text-lg uppercase text-foreground">{item.name}</p>
               <p className="font-mono text-xs text-muted-foreground">
                 {item.price ? formatGBP(item.price) : "—"}
@@ -468,9 +468,9 @@ function DishCard({
       </DialogTrigger>
       <DialogContent title={item.name} wide={editing}>
         {editing ? (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-5">
             <MenuItemFormFields form={form} setForm={setForm} categories={categories} />
-            <div className="flex gap-2">
+            <div className="flex gap-3">
               <Button className="flex-1" disabled={busy} onClick={saveEdit}>
                 {busy ? "Saving…" : "Save changes"}
               </Button>
@@ -480,17 +480,17 @@ function DishCard({
             </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-5">
             {embed ? <VideoEmbed embed={embed} /> : null}
             {item.description ? (
               <p className="text-sm text-foreground">{item.description}</p>
             ) : (
               <p className="text-sm text-muted-foreground">No recipe notes yet.</p>
             )}
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-3">
               {item.category ? <Badge tone="outline">{item.category}</Badge> : null}
               {item.isBestseller ? (
-                <Badge tone="pop" className="border-foreground bg-gold text-ink">
+                <Badge tone="pop" className="border-foreground bg-gold text-foreground">
                   Bestseller
                 </Badge>
               ) : null}
@@ -500,7 +500,7 @@ function DishCard({
               </span>
             </div>
             {canManage ? (
-              <div className="flex gap-2 border-t-2 border-foreground/15 pt-4">
+              <div className="flex gap-3 border-t-2 border-foreground/15 pt-4">
                 <Button variant="outline" className="flex-1" onClick={() => setEditing(true)}>
                   <Pencil /> Edit
                 </Button>
@@ -535,7 +535,7 @@ function MenuPage() {
         title="The Menu"
         actions={canManage ? <AddDishDialog categories={categories} /> : null}
       />
-      <p className="-mt-4 mb-6 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+      <p className="-mt-4 mb-8 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
         Train from the film — plate it the same at every site.
       </p>
 
@@ -547,7 +547,7 @@ function MenuPage() {
         />
       ) : (
         <>
-          <div className="mb-6 flex gap-2 overflow-x-auto pb-2">
+          <div className="mb-8 flex gap-3 overflow-x-auto pb-2">
             <CategoryChip
               label="All"
               active={activeCategory === "All"}
@@ -570,7 +570,7 @@ function MenuPage() {
               hint={`No dishes filed under “${activeCategory}”.`}
             />
           ) : (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 xl:grid-cols-4">
               {filtered.map((item) => (
                 <DishCard
                   key={item.id}

@@ -200,7 +200,7 @@ function UsageLogCard({ locationId, items }: { locationId: string; items: StockI
     <Card raised className={cn(mode === "delivery" && "border-gold")}>
       <CardHeader>
         <CardTitle>Log tonight's usage</CardTitle>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <span
             className={cn(
               "font-mono text-[10px] font-bold uppercase tracking-widest",
@@ -232,7 +232,7 @@ function UsageLogCard({ locationId, items }: { locationId: string; items: StockI
           />
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
               {active.map((item) => {
                 const qty = staged[item.id];
                 return (
@@ -241,7 +241,7 @@ function UsageLogCard({ locationId, items }: { locationId: string; items: StockI
                     type="button"
                     onClick={() => setOpenItem(item)}
                     className={cn(
-                      "flex cursor-pointer flex-col items-start gap-1 border-2 px-3 py-2.5 text-left transition-all",
+                      "flex cursor-pointer flex-col items-start gap-1 border-2 px-3 py-3 text-left transition-all",
                       qty
                         ? mode === "usage"
                           ? "border-destructive bg-destructive/10"
@@ -271,7 +271,7 @@ function UsageLogCard({ locationId, items }: { locationId: string; items: StockI
               })}
             </div>
 
-            <div className="sticky bottom-4 z-10 mt-4">
+            <div className="sticky bottom-4 z-10 mt-5">
               <Button className="w-full" disabled={stagedCount === 0 || busy} onClick={submit}>
                 {mode === "usage" ? <Minus /> : <Plus />}
                 {stagedCount === 0
@@ -327,7 +327,7 @@ function QtyDialog({
         title={item?.name ?? "Quantity"}
         description={item ? `${formatQty(item.level)} ${item.unit} on hand` : undefined}
       >
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
           <div className="flex items-center justify-center gap-3">
             <Button type="button" variant="outline" size="icon" onClick={() => step(-1)}>
               <Minus />
@@ -346,7 +346,7 @@ function QtyDialog({
             </Button>
           </div>
 
-          <div className="flex flex-wrap justify-center gap-2">
+          <div className="flex flex-wrap justify-center gap-3">
             {QUICK_AMOUNTS.map((q) => (
               <Button
                 key={q}
@@ -396,7 +396,7 @@ function RunningLevelsCard({ locationId, items }: { locationId: string; items: S
   }
 
   return (
-    <Card className="mt-6">
+    <Card className="mt-8">
       <CardHeader>
         <CardTitle>Running levels</CardTitle>
         <Button size="sm" onClick={() => setAddOpen(true)}>
@@ -407,12 +407,12 @@ function RunningLevelsCard({ locationId, items }: { locationId: string; items: S
         <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="border-b-2 border-foreground/15 text-left font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-              <th className="px-4 py-2">Item</th>
-              <th className="px-2 py-2 text-right">Level</th>
-              <th className="px-2 py-2">Supplier</th>
-              <th className="px-2 py-2" />
-              <th className="px-2 py-2 text-center">Active</th>
-              <th className="px-2 py-2" />
+              <th className="px-4 py-2.5">Item</th>
+              <th className="px-3 py-2.5 text-right">Level</th>
+              <th className="px-3 py-2.5">Supplier</th>
+              <th className="px-3 py-2.5" />
+              <th className="px-3 py-2.5 text-center">Active</th>
+              <th className="px-3 py-2.5" />
             </tr>
           </thead>
           <tbody>
@@ -428,29 +428,29 @@ function RunningLevelsCard({ locationId, items }: { locationId: string; items: S
                   key={item.id}
                   className={cn("border-b border-foreground/10", !item.active && "opacity-50")}
                 >
-                  <td className="px-4 py-2.5 font-bold text-foreground">{item.name}</td>
+                  <td className="px-4 py-3 font-bold text-foreground">{item.name}</td>
                   <td
                     className={cn(
-                      "px-2 py-2.5 text-right font-mono text-sm font-bold",
+                      "px-3 py-3 text-right font-mono text-sm font-bold",
                       item.level < 0 ? "text-destructive" : "text-foreground",
                     )}
                   >
                     {formatQty(item.level)} {item.unit}
                   </td>
-                  <td className="px-2 py-2.5 text-xs text-muted-foreground">
+                  <td className="px-3 py-3 text-xs text-muted-foreground">
                     {item.supplier ?? "—"}
                   </td>
-                  <td className="px-2 py-2.5">
+                  <td className="px-3 py-3">
                     {item.isLow ? (
                       <Badge tone="outline" className="border-gold text-gold">
                         Low
                       </Badge>
                     ) : null}
                   </td>
-                  <td className="px-2 py-2.5 text-center">
+                  <td className="px-3 py-3 text-center">
                     <Switch checked={item.active} onCheckedChange={(v) => toggleActive(item, v)} />
                   </td>
-                  <td className="px-2 py-2.5 text-right">
+                  <td className="px-3 py-3 text-right">
                     <Button variant="ghost" size="icon-sm" onClick={() => setEditingItem(item)}>
                       <Pencil />
                     </Button>
@@ -532,7 +532,7 @@ function AddItemDialog({
       }}
     >
       <DialogContent title="Add stock item">
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
           <Field label="Item name">
             <Input
               autoFocus
@@ -541,7 +541,7 @@ function AddItemDialog({
               placeholder="Chicken breast"
             />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <Field label="Unit">
               <Input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="kg" />
             </Field>
@@ -554,7 +554,7 @@ function AddItemDialog({
               />
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <Field label="Supplier (optional)">
               <Input
                 value={supplier}
@@ -637,11 +637,11 @@ function EditItemDialog({
   return (
     <Dialog open={item !== null} onOpenChange={onOpenChange}>
       <DialogContent title={item?.name ?? "Edit item"}>
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
           <Field label="Item name">
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <Field label="Unit">
               <Input value={unit} onChange={(e) => setUnit(e.target.value)} />
             </Field>
@@ -676,7 +676,7 @@ function OrderListCard({
 }) {
   const hasLow = orderList.length > 0;
   return (
-    <Card className="mt-6" raised={hasLow}>
+    <Card className="mt-8" raised={hasLow}>
       <CardHeader>
         <CardTitle>Order list</CardTitle>
       </CardHeader>
@@ -684,7 +684,7 @@ function OrderListCard({
         {!hasLow ? (
           <EmptyState icon={PartyPopper} title="Nothing's running out. Sleep easy." />
         ) : (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-5">
             {orderList.map((group) => (
               <SupplierGroup key={group.supplier} group={group} locationName={locationName} />
             ))}
@@ -710,7 +710,7 @@ function SupplierGroup({ group, locationName }: { group: OrderGroup; locationNam
 
   return (
     <div className="border-2 border-gold/60">
-      <div className="flex items-center justify-between border-b-2 border-gold/60 bg-gold/10 px-3 py-2">
+      <div className="flex items-center justify-between border-b-2 border-gold/60 bg-gold/10 px-3 py-2.5">
         <span className="font-mono text-xs font-bold uppercase tracking-widest text-foreground">
           {group.supplier}
         </span>
@@ -720,7 +720,7 @@ function SupplierGroup({ group, locationName }: { group: OrderGroup; locationNam
       </div>
       <ul className="divide-y divide-foreground/10">
         {group.items.map((i) => (
-          <li key={i.name} className="flex items-center justify-between px-3 py-2 text-sm">
+          <li key={i.name} className="flex items-center justify-between px-3 py-3 text-sm">
             <span className="text-foreground">{i.name}</span>
             <span className="font-mono text-xs font-bold text-gold">
               {formatQty(i.suggestedQty)} {i.unit}
@@ -748,7 +748,7 @@ function moveAmountLabel(m: MoveRow): string {
 
 function RecentMovesCard({ moves }: { moves: MoveRow[] }) {
   return (
-    <Card className="mt-6">
+    <Card className="mt-8">
       <CardHeader>
         <CardTitle>Recent moves</CardTitle>
       </CardHeader>
@@ -761,7 +761,7 @@ function RecentMovesCard({ moves }: { moves: MoveRow[] }) {
             return (
               <div
                 key={m.id}
-                className="flex items-center gap-3 border-b border-foreground/10 px-4 py-2.5 last:border-b-0"
+                className="flex items-center gap-3 border-b border-foreground/10 px-4 py-3 last:border-b-0"
               >
                 <span
                   className={cn(

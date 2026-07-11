@@ -150,7 +150,7 @@ function SalesPage() {
         onConsumedSelection={() => setSelection(null)}
       />
 
-      <div className="mt-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
+      <div className="mt-8 grid grid-cols-2 gap-4 sm:gap-5 xl:grid-cols-4">
         <StatCard
           icon={PoundSterling}
           label="Today so far"
@@ -194,24 +194,24 @@ function SalesPage() {
       </div>
 
       {dashboard.worstDay ? (
-        <p className="mt-2 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+        <p className="mt-3 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
           Worst day on record: {formatShortDate(dashboard.worstDay.date)} ·{" "}
           <span className="text-foreground">{formatGBP(dashboard.worstDay.total)}</span>
         </p>
       ) : null}
 
-      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
+      <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-2">
         <DailyChannelChart daily={dashboard.daily} />
         <ChannelMixBlocks channelMix={dashboard.channelMix} />
       </div>
 
       {showSiteComparison ? (
-        <div className="mt-6">
+        <div className="mt-8">
           <SiteComparisonChart byLocation={dashboard.byLocation} />
         </div>
       ) : null}
 
-      <div className="mt-6">
+      <div className="mt-8">
         <RecentEntriesTable entries={dashboard.recentEntries} onEdit={setSelection} />
       </div>
     </div>
@@ -337,7 +337,7 @@ function LogDayCard({
 
   if (sites.length === 0) {
     return (
-      <Card className="mt-6 border-2 border-foreground shadow-neo">
+      <Card className="mt-8 border-2 border-foreground shadow-neo">
         <CardBody>
           <EmptyState
             icon={Store}
@@ -352,7 +352,7 @@ function LogDayCard({
   return (
     <Card
       className={cn(
-        "mt-6 border-2",
+        "mt-8 border-2",
         existingId ? "border-pop shadow-pop" : "border-foreground shadow-neo",
       )}
     >
@@ -360,7 +360,7 @@ function LogDayCard({
         <CardTitle>Log the day</CardTitle>
         {existingId ? <Badge tone="pop">Editing a logged day</Badge> : null}
       </CardHeader>
-      <CardBody className="flex flex-col gap-4">
+      <CardBody className="flex flex-col gap-5">
         {missingYesterday.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2 border-2 border-gold bg-gold/10 px-3 py-2">
             <AlertTriangle className="size-4 shrink-0 text-gold" strokeWidth={2.5} />
@@ -370,7 +370,7 @@ function LogDayCard({
           </div>
         ) : null}
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Site">
             <Select value={locationId} onValueChange={setLocationId}>
               <SelectTrigger>
@@ -390,7 +390,7 @@ function LogDayCard({
           </Field>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Uber">
             <MoneyInput value={uber} onChange={setUber} autoFocus />
           </Field>
@@ -533,7 +533,10 @@ function ChartTooltip({
       {payload.map((p) => (
         <p key={p.dataKey ?? p.name} className="flex items-center justify-between gap-4 text-xs">
           <span className="flex items-center gap-1.5 text-foreground">
-            <span className="size-2" style={{ backgroundColor: p.color ?? "#999" }} />
+            <span
+              className="size-2"
+              style={{ backgroundColor: p.color ?? "var(--muted-foreground)" }}
+            />
             {p.name}
           </span>
           <span className="font-mono font-bold text-foreground">{formatGBP(p.value ?? 0)}</span>
@@ -549,9 +552,10 @@ function ChartTooltip({
   );
 }
 
-const AXIS_TICK = { fill: "#9a938a", fontSize: 10, fontFamily: "var(--font-mono)" };
-const AXIS_LINE = { stroke: "rgba(242,237,230,0.12)" };
-const GRID_STROKE = "rgba(242,237,230,0.12)";
+const AXIS_TICK = { fill: "var(--muted-foreground)", fontSize: 10, fontFamily: "var(--font-mono)" };
+const AXIS_LINE = { stroke: "var(--border)" };
+const GRID_STROKE = "var(--border)";
+const CURSOR_FILL = "var(--muted)";
 
 function DailyChannelChart({ daily }: { daily: Dashboard["daily"] }) {
   const tickInterval = Math.max(0, Math.ceil(daily.length / 10) - 1);
@@ -581,7 +585,7 @@ function DailyChannelChart({ daily }: { daily: Dashboard["daily"] }) {
                 tickFormatter={(v: number) => `£${v}`}
                 width={56}
               />
-              <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(242,237,230,0.06)" }} />
+              <Tooltip content={<ChartTooltip />} cursor={{ fill: CURSOR_FILL }} />
               <Bar dataKey="uber" stackId="ch" fill={CHANNEL_COLOR.uber} name="Uber" />
               <Bar dataKey="takeaway" stackId="ch" fill={CHANNEL_COLOR.takeaway} name="Takeaway" />
               <Bar dataKey="dineIn" stackId="ch" fill={CHANNEL_COLOR.dineIn} name="Dine-in" />
@@ -655,7 +659,7 @@ function SiteComparisonChart({ byLocation }: { byLocation: Dashboard["byLocation
                 tickFormatter={(v: number) => `£${v}`}
                 width={56}
               />
-              <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(242,237,230,0.06)" }} />
+              <Tooltip content={<ChartTooltip />} cursor={{ fill: CURSOR_FILL }} />
               <Bar dataKey="uber" stackId="site" fill={CHANNEL_COLOR.uber} name="Uber" />
               <Bar
                 dataKey="takeaway"
@@ -699,14 +703,14 @@ function RecentEntriesTable({
           <table className="w-full min-w-[760px] text-sm">
             <thead>
               <tr className="border-b-2 border-foreground/15 text-left font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                <th className="px-4 py-2">Date</th>
-                <th className="px-2 py-2">Site</th>
-                <th className="px-2 py-2 text-right">Uber</th>
-                <th className="px-2 py-2 text-right">Takeaway</th>
-                <th className="px-2 py-2 text-right">Dine-in</th>
-                <th className="px-2 py-2 text-right">Total</th>
-                <th className="px-2 py-2">Note</th>
-                <th className="px-4 py-2">Logged by</th>
+                <th className="px-4 py-2.5">Date</th>
+                <th className="px-3 py-2.5">Site</th>
+                <th className="px-3 py-2.5 text-right">Uber</th>
+                <th className="px-3 py-2.5 text-right">Takeaway</th>
+                <th className="px-3 py-2.5 text-right">Dine-in</th>
+                <th className="px-3 py-2.5 text-right">Total</th>
+                <th className="px-3 py-2.5">Note</th>
+                <th className="px-4 py-2.5">Logged by</th>
               </tr>
             </thead>
             <tbody>
@@ -716,24 +720,22 @@ function RecentEntriesTable({
                   onClick={() => onEdit({ locationId: e.locationId, date: e.date })}
                   className="cursor-pointer border-b border-foreground/10 hover:bg-muted/40"
                 >
-                  <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground">
+                  <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">
                     {formatShortDate(e.date)}
                   </td>
-                  <td className="px-2 py-2.5 font-bold text-foreground">{e.locationName}</td>
-                  <td className="px-2 py-2.5 text-right font-mono text-xs">{formatGBP(e.uber)}</td>
-                  <td className="px-2 py-2.5 text-right font-mono text-xs">
+                  <td className="px-3 py-3 font-bold text-foreground">{e.locationName}</td>
+                  <td className="px-3 py-3 text-right font-mono text-xs">{formatGBP(e.uber)}</td>
+                  <td className="px-3 py-3 text-right font-mono text-xs">
                     {formatGBP(e.takeaway)}
                   </td>
-                  <td className="px-2 py-2.5 text-right font-mono text-xs">
-                    {formatGBP(e.dineIn)}
-                  </td>
-                  <td className="px-2 py-2.5 text-right font-mono text-xs font-bold text-pop">
+                  <td className="px-3 py-3 text-right font-mono text-xs">{formatGBP(e.dineIn)}</td>
+                  <td className="px-3 py-3 text-right font-mono text-xs font-bold text-pop">
                     {formatGBP(e.total)}
                   </td>
-                  <td className="max-w-48 truncate px-2 py-2.5 text-xs text-muted-foreground">
+                  <td className="max-w-48 truncate px-3 py-3 text-xs text-muted-foreground">
                     {e.note ?? "—"}
                   </td>
-                  <td className="px-4 py-2.5 font-mono text-[10px] uppercase text-muted-foreground">
+                  <td className="px-4 py-3 font-mono text-[10px] uppercase text-muted-foreground">
                     {e.byMemberName ?? "—"}
                   </td>
                 </tr>

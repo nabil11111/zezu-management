@@ -110,6 +110,13 @@ async function main() {
   console.log("— crew");
   const CREW = [
     { name: "Head Office", role: "ceo", code: "8888", rate: null, sites: [] as string[] },
+    {
+      name: "Central Warehouse",
+      role: "warehouse",
+      code: "7777",
+      rate: null,
+      sites: [] as string[],
+    },
     { name: "Wei Chen", role: "manager", code: "1111", rate: "14.50", sites: [lodgeLane.id] },
     { name: "Sara Hughes", role: "manager", code: "2222", rate: "14.50", sites: [anfield.id] },
     { name: "Jamal Carter", role: "manager", code: "3333", rate: "14.50", sites: [wallasey.id] },

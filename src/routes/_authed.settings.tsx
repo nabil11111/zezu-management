@@ -52,7 +52,7 @@ function SettingsPage() {
     <div className="max-w-4xl">
       <PageHeader kicker="CEO only" title="Settings" />
 
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-8">
         <LocationsCard locations={locations} onShowPoster={setPosterLocation} />
         <ActivityCard activity={activity} />
         <BrandCard />
@@ -80,7 +80,7 @@ function LocationsCard({
         <CardTitle>Locations</CardTitle>
         <AddLocationDialog />
       </CardHeader>
-      <CardBody className="flex flex-col gap-3 p-3">
+      <CardBody className="flex flex-col gap-3 p-4">
         {locations.length === 0 ? (
           <EmptyState
             icon={MapPin}
@@ -115,7 +115,7 @@ function LocationRow({
   const [busy, setBusy] = useState(false);
 
   return (
-    <div className="flex flex-col gap-2 border-b border-foreground/10 py-3 last:border-b-0 md:flex-row md:items-center md:justify-between">
+    <div className="flex flex-col gap-3 border-b border-foreground/10 py-3 last:border-b-0 md:flex-row md:items-center md:justify-between">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <p className="truncate text-sm font-bold text-foreground">{location.name}</p>
@@ -124,15 +124,15 @@ function LocationRow({
           </span>
           {!location.active ? <Badge tone="outline">inactive</Badge> : null}
         </div>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+        <p className="mt-1 truncate text-xs text-muted-foreground">
           {location.address ?? "No address on file"}
         </p>
-        <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70">
+        <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70">
           {location.memberCount} {location.memberCount === 1 ? "member" : "members"} · order{" "}
           {location.sortOrder}
         </p>
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className="flex shrink-0 items-center gap-2">
         <Switch
           checked={location.active}
           disabled={busy}
@@ -196,7 +196,7 @@ function AddLocationDialog() {
         </Button>
       </DialogTrigger>
       <DialogContent title="Add Location">
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
           <Field label="Name">
             <Input
               autoFocus
@@ -264,7 +264,7 @@ function EditLocationDialog({ location }: { location: LocationAdminRow }) {
         </Button>
       </DialogTrigger>
       <DialogContent title={`Edit ${location.name}`}>
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
           <Field label="Name">
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
@@ -327,8 +327,8 @@ function PosterDialog({ location, onClose }: { location: LocationAdminRow; onClo
       }}
     >
       <DialogContent title={`${location.name} — Door Poster`} wide className="max-w-2xl">
-        <div className="flex flex-col items-center gap-4">
-          <div className="no-print flex flex-wrap items-center justify-center gap-2">
+        <div className="flex flex-col items-center gap-5">
+          <div className="no-print flex flex-wrap items-center justify-center gap-3">
             <Button onClick={() => window.print()}>
               <Printer /> Print
             </Button>
@@ -360,7 +360,7 @@ function ActivityCard({ activity }: { activity: ActivityRow[] }) {
       <CardHeader>
         <CardTitle>Activity</CardTitle>
       </CardHeader>
-      <CardBody className="flex flex-col p-3">
+      <CardBody className="flex flex-col p-4">
         {activity.length === 0 ? (
           <p className="px-2 py-6 text-center text-sm text-muted-foreground">
             Nothing logged yet — every change gets a name and a time here.
@@ -369,7 +369,7 @@ function ActivityCard({ activity }: { activity: ActivityRow[] }) {
           activity.map((a) => (
             <div
               key={a.id}
-              className="flex flex-wrap items-center justify-between gap-2 border-b border-foreground/10 px-2 py-2.5 last:border-b-0"
+              className="flex flex-wrap items-center justify-between gap-3 border-b border-foreground/10 px-3 py-3 last:border-b-0"
             >
               <div className="flex min-w-0 items-center gap-2">
                 <Badge tone="outline" className="shrink-0">
@@ -406,7 +406,7 @@ function BrandCard() {
       <CardHeader>
         <CardTitle>The brand</CardTitle>
       </CardHeader>
-      <CardBody className="flex flex-col gap-3">
+      <CardBody className="flex flex-col gap-4">
         <div>
           <p className="font-display text-3xl uppercase leading-none text-foreground">
             ZEZU <span className="text-pop">· The Modern Chinese</span>

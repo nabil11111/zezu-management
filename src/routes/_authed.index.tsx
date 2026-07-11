@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_authed/")({
   beforeLoad: ({ context }) => {
     if (context.actor.role === "staff") throw redirect({ to: "/my" });
+    if (context.actor.role === "warehouse") throw redirect({ to: "/warehouse" });
   },
   loader: async () => await getLiveView(),
   component: LiveViewPage,
@@ -92,7 +93,7 @@ function StatusIndicator({ site, urgent }: { site: LiveViewSite; urgent: boolean
           <span className="pulse-dot size-2 shrink-0 bg-gold" />
           Open
         </p>
-        <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+        <p className="mt-1 font-mono text-[10px] text-muted-foreground">
           since {ukTime(site.shopDay.openedAt)} by {site.shopDay.openedByName}
         </p>
       </div>
@@ -106,7 +107,7 @@ function StatusIndicator({ site, urgent }: { site: LiveViewSite; urgent: boolean
         <p className="font-mono text-xs font-bold uppercase tracking-widest text-muted-foreground">
           Closed
         </p>
-        <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+        <p className="mt-1 font-mono text-[10px] text-muted-foreground">
           closed {ukTime(closedAt)}
         </p>
       </div>
@@ -139,7 +140,7 @@ function SiteCard({ site, urgentNotOpened }: { site: LiveViewSite; urgentNotOpen
         <div className="min-w-0">
           <p className="truncate font-display text-2xl uppercase text-foreground">{site.name}</p>
           {site.address ? (
-            <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
+            <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
               {site.address}
             </p>
           ) : null}
@@ -147,7 +148,7 @@ function SiteCard({ site, urgentNotOpened }: { site: LiveViewSite; urgentNotOpen
         <StatusIndicator site={site} urgent={urgentNotOpened} />
       </CardHeader>
 
-      <CardBody className="flex flex-1 flex-col gap-4">
+      <CardBody className="flex flex-1 flex-col gap-5">
         {/* On the clock */}
         <div>
           <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
@@ -156,11 +157,11 @@ function SiteCard({ site, urgentNotOpened }: { site: LiveViewSite; urgentNotOpen
           {site.clockedIn.length === 0 ? (
             <p className="font-mono text-xs text-muted-foreground">Nobody clocked in</p>
           ) : (
-            <ul className="flex flex-col gap-1.5">
+            <ul className="flex flex-col gap-2">
               {site.clockedIn.map((m) => (
                 <li
                   key={m.memberId}
-                  className="flex items-center justify-between gap-2 border-b border-foreground/10 pb-1.5 last:border-b-0 last:pb-0"
+                  className="flex items-center justify-between gap-2 border-b border-foreground/10 pb-2 last:border-b-0 last:pb-0"
                 >
                   <span className="min-w-0 truncate text-sm font-bold text-foreground">
                     {m.name}{" "}
@@ -199,7 +200,7 @@ function SiteCard({ site, urgentNotOpened }: { site: LiveViewSite; urgentNotOpen
         </div>
 
         {/* Flags */}
-        <div className="mt-auto flex flex-wrap gap-2 pt-1">
+        <div className="mt-auto flex flex-wrap gap-3 pt-1">
           {site.lowStock > 0 ? (
             <Link to="/stock" className="transition-opacity hover:opacity-80">
               <Badge tone="outline" className="border-gold text-gold">
@@ -264,7 +265,7 @@ function LiveViewPage() {
       ) : (
         <>
           {/* Totals strip */}
-          <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="mb-10 grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-5">
             <StatBlock label="Today so far" value={formatGBP(data.totals.todayTotal)} />
             <StatBlock label="On the clock" value={String(data.totals.clockedInCount)} />
             <StatBlock
@@ -280,7 +281,7 @@ function LiveViewPage() {
           </div>
 
           {/* Site cards */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">
             {data.sites.map((site) => (
               <SiteCard
                 key={site.id}
@@ -293,12 +294,12 @@ function LiveViewPage() {
       )}
 
       {/* Quick actions */}
-      <div className="mt-10 flex flex-wrap gap-2 border-t-2 border-foreground/15 pt-6">
+      <div className="mt-10 flex flex-wrap gap-3 border-t-2 border-foreground/15 pt-6">
         {QUICK_LINKS.map(({ to, label, icon: Icon }) => (
           <Link
             key={to}
             to={to}
-            className="flex items-center gap-2 border-2 border-foreground/30 px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
+            className="flex items-center gap-2 border-2 border-foreground/30 px-3 py-2.5 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
           >
             <Icon className="size-3.5" strokeWidth={2.5} />
             {label}

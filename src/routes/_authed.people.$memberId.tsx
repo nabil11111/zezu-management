@@ -49,7 +49,12 @@ export const Route = createFileRoute("/_authed/people/$memberId")({
 type MemberDetail = Awaited<ReturnType<typeof getMember>>;
 type LocationOption = Awaited<ReturnType<typeof listLocationOptions>>[number];
 
-const ROLE_LABEL: Record<MemberRole, string> = { ceo: "CEO", manager: "Manager", staff: "Crew" };
+const ROLE_LABEL: Record<MemberRole, string> = {
+  ceo: "CEO",
+  manager: "Manager",
+  staff: "Crew",
+  warehouse: "Warehouse",
+};
 
 const SHIFT_STATUS_TONE: Record<ShiftStatus, "warning" | "success" | "danger"> = {
   pending: "warning",
@@ -66,7 +71,8 @@ function RoleBadge({ role }: { role: MemberRole }) {
     );
   }
   if (role === "manager") return <Badge tone="pop">Manager</Badge>;
-  return <Badge tone="neutral">Crew</Badge>;
+  if (role === "warehouse") return <Badge tone="outline">Warehouse</Badge>;
+  return <Badge tone="neutral">{ROLE_LABEL[role] ?? role}</Badge>;
 }
 
 function ChipButton({
@@ -146,18 +152,18 @@ function MemberDetail() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <ProfileCard member={member} isCeo={isCeo} />
         {isCeo ? <LocationsCard member={member} locationOptions={locationOptions} /> : null}
         {isCeo ? <CodeCard member={member} /> : null}
         {isCeo ? <ActiveCard member={member} /> : null}
       </div>
 
-      <div className="mt-4">
+      <div className="mt-6">
         <OnboardingCard member={member} />
       </div>
 
-      <div className="mt-4">
+      <div className="mt-6">
         <TimesheetCard member={member} />
       </div>
     </div>
@@ -166,7 +172,7 @@ function MemberDetail() {
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-foreground/10 pb-2 last:border-b-0 last:pb-0">
+    <div className="flex items-center justify-between gap-3 border-b border-foreground/10 pb-2.5 last:border-b-0 last:pb-0">
       <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
         {label}
       </span>
@@ -182,7 +188,7 @@ function ProfileCard({ member, isCeo }: { member: MemberDetail; isCeo: boolean }
         <CardTitle>Profile</CardTitle>
         {isCeo ? <EditMemberDialog member={member} /> : null}
       </CardHeader>
-      <CardBody className="flex flex-col gap-2.5">
+      <CardBody className="flex flex-col gap-3">
         <InfoRow label="Role" value={ROLE_LABEL[member.role]} />
         <InfoRow label="Phone" value={member.phone ?? "Not set"} />
         <InfoRow
@@ -247,11 +253,11 @@ function EditMemberDialog({ member }: { member: MemberDetail }) {
         </Button>
       </DialogTrigger>
       <DialogContent title="Edit profile">
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
           <Field label="Name">
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <Field label="Role">
               <Select value={role} onValueChange={(v) => setRole(v as MemberRole)}>
                 <SelectTrigger>
@@ -277,7 +283,7 @@ function EditMemberDialog({ member }: { member: MemberDetail }) {
               />
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <Field label="Phone">
               <Input
                 value={phone}
@@ -335,11 +341,11 @@ function LocationsCard({
       <CardHeader>
         <CardTitle>Sites</CardTitle>
       </CardHeader>
-      <CardBody className="flex flex-col gap-3">
+      <CardBody className="flex flex-col gap-4">
         {locationOptions.length === 0 ? (
           <p className="text-xs text-muted-foreground">No sites set up yet.</p>
         ) : (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3">
             {locationOptions.map((loc) => {
               const active = selected.includes(loc.id);
               return (
@@ -407,7 +413,7 @@ function CodeCard({ member }: { member: MemberDetail }) {
           </DialogTrigger>
           <DialogContent title={revealedCode ? "New code" : "Regenerate code?"}>
             {revealedCode ? (
-              <div className="flex flex-col items-center gap-4 py-2 text-center">
+              <div className="flex flex-col items-center gap-5 py-2 text-center">
                 <div className="flex gap-3">
                   {revealedCode.split("").map((d, i) => (
                     <span
@@ -424,7 +430,7 @@ function CodeCard({ member }: { member: MemberDetail }) {
                 <Button onClick={() => setOpen(false)}>Done</Button>
               </div>
             ) : (
-              <div className="flex flex-col gap-4 text-center">
+              <div className="flex flex-col gap-5 text-center">
                 <p className="text-sm text-muted-foreground">
                   {member.name}&rsquo;s old code stops working the moment you generate a new one.
                 </p>
@@ -487,7 +493,7 @@ function ActiveCard({ member }: { member: MemberDetail }) {
       </CardBody>
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent title="Switch off access?">
-          <div className="flex flex-col gap-4 text-center">
+          <div className="flex flex-col gap-5 text-center">
             <p className="text-sm text-muted-foreground">
               {member.name} won&rsquo;t be able to clock in or sign in — effective immediately.
             </p>
@@ -590,7 +596,7 @@ function OnboardingCard({ member }: { member: MemberDetail }) {
             </div>
           ))
         )}
-        <div className="flex items-center gap-2 border-t-2 border-foreground/15 p-3">
+        <div className="flex items-center gap-3 border-t-2 border-foreground/15 p-3">
           <Input
             placeholder="Add a step…"
             value={newStep}
@@ -628,25 +634,25 @@ function TimesheetCard({ member }: { member: MemberDetail }) {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b-2 border-foreground/15 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                <th className="whitespace-nowrap py-2 pr-4">Month</th>
-                <th className="whitespace-nowrap py-2 pr-4">Verified</th>
-                <th className="whitespace-nowrap py-2 pr-4">Pending</th>
-                <th className="whitespace-nowrap py-2">Pay</th>
+                <th className="whitespace-nowrap py-2.5 pr-4">Month</th>
+                <th className="whitespace-nowrap py-2.5 pr-4">Verified</th>
+                <th className="whitespace-nowrap py-2.5 pr-4">Pending</th>
+                <th className="whitespace-nowrap py-2.5">Pay</th>
               </tr>
             </thead>
             <tbody>
               {member.monthlySummary.map((row) => (
                 <tr key={row.month} className="border-b border-foreground/10 last:border-b-0">
-                  <td className="whitespace-nowrap py-2 pr-4 font-mono text-xs text-foreground">
+                  <td className="whitespace-nowrap py-3 pr-4 font-mono text-xs text-foreground">
                     {formatMonth(row.month)}
                   </td>
-                  <td className="whitespace-nowrap py-2 pr-4 font-mono text-xs text-foreground">
+                  <td className="whitespace-nowrap py-3 pr-4 font-mono text-xs text-foreground">
                     {row.verifiedHours}h
                   </td>
-                  <td className="whitespace-nowrap py-2 pr-4 font-mono text-xs text-muted-foreground">
+                  <td className="whitespace-nowrap py-3 pr-4 font-mono text-xs text-muted-foreground">
                     {row.pendingHours}h
                   </td>
-                  <td className="whitespace-nowrap py-2 font-mono text-xs font-bold text-pop">
+                  <td className="whitespace-nowrap py-3 font-mono text-xs font-bold text-pop">
                     {row.pay !== null ? formatGBP(row.pay) : "—"}
                   </td>
                 </tr>
@@ -666,7 +672,7 @@ function TimesheetCard({ member }: { member: MemberDetail }) {
               {member.recentShifts.map((s) => (
                 <div
                   key={s.id}
-                  className="flex items-center justify-between gap-3 border-b border-foreground/10 py-2.5 last:border-b-0"
+                  className="flex items-center justify-between gap-3 border-b border-foreground/10 py-3 last:border-b-0"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm text-foreground">{s.locationName}</p>

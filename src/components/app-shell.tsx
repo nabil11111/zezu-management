@@ -1,16 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
   LayoutDashboard,
   PoundSterling,
   Package,
+  PackageCheck,
+  Truck,
   UtensilsCrossed,
   UserRound,
   Clock,
   Settings,
   LogOut,
   Menu,
+  Moon,
+  Sun,
   X,
 } from "lucide-react";
 import { logout } from "@/lib/auth";
@@ -20,18 +24,21 @@ import { cn } from "@/lib/utils";
 
 /**
  * Role-aware nav. What your code opens depends on who you are:
- *   ceo     → everything, every location
- *   manager → their locations: live view, sales, stock, shifts, crew
- *   staff   → their own shifts + the menu (training videos)
+ *   ceo       → everything, every location
+ *   manager   → their locations: live view, sales, stock, orders, shifts, crew
+ *   staff     → their own shifts, stock orders, the menu (training videos)
+ *   warehouse → every branch's stock orders, to dispatch them
  */
 const NAV = [
   { to: "/", label: "Live", icon: LayoutDashboard, exact: true, roles: ["ceo", "manager"] },
   { to: "/sales", label: "Sales", icon: PoundSterling, roles: ["ceo", "manager"] },
   { to: "/stock", label: "Stock", icon: Package, roles: ["ceo", "manager"] },
+  { to: "/orders", label: "Orders", icon: PackageCheck, roles: ["ceo", "manager", "staff"] },
+  { to: "/warehouse", label: "Warehouse", icon: Truck, roles: ["ceo", "warehouse"] },
   { to: "/menu", label: "Menu", icon: UtensilsCrossed, roles: ["ceo", "manager", "staff"] },
   { to: "/people", label: "People", icon: UserRound, roles: ["ceo", "manager"] },
   { to: "/shifts", label: "Shifts", icon: Clock, roles: ["ceo", "manager"] },
-  { to: "/my", label: "My Shifts", icon: Clock, roles: ["staff"] },
+  { to: "/my", label: "My Shifts", icon: Clock, roles: ["staff", "warehouse"] },
   { to: "/settings", label: "Settings", icon: Settings, roles: ["ceo"] },
 ] as const;
 
@@ -39,7 +46,45 @@ const ROLE_LABEL: Record<Actor["role"], string> = {
   ceo: "CEO",
   manager: "Manager",
   staff: "Crew",
+  warehouse: "Warehouse",
 };
+
+/** Swaps .dark/.light on <html> and remembers the choice. Default is dark. */
+function ThemeToggle() {
+  const [light, setLight] = useState(false);
+
+  useEffect(() => {
+    setLight(document.documentElement.classList.contains("light"));
+  }, []);
+
+  function toggle() {
+    const next = !light;
+    const cls = document.documentElement.classList;
+    cls.toggle("light", next);
+    cls.toggle("dark", !next);
+    try {
+      localStorage.setItem("zezu-theme", next ? "light" : "dark");
+    } catch {
+      // Private browsing — the toggle still works for this visit.
+    }
+    setLight(next);
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      aria-label={light ? "Switch to dark mode" : "Switch to light mode"}
+      className="flex w-full cursor-pointer items-center gap-3 border-2 border-transparent px-3 py-2.5 font-mono text-xs font-bold uppercase tracking-widest text-muted-foreground transition-all hover:border-foreground/30 hover:text-foreground"
+    >
+      {light ? (
+        <Moon className="size-4" strokeWidth={2.5} />
+      ) : (
+        <Sun className="size-4" strokeWidth={2.5} />
+      )}
+      {light ? "Dark mode" : "Light mode"}
+    </button>
+  );
+}
 
 function NavLinks({ role, onNavigate }: { role: Actor["role"]; onNavigate?: () => void }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -115,6 +160,7 @@ export function AppShell({ actor, children }: { actor: Actor; children: React.Re
           <NavLinks role={actor.role} />
           <div>
             {identity}
+            <ThemeToggle />
             <LogoutButton />
           </div>
         </div>
@@ -145,6 +191,7 @@ export function AppShell({ actor, children }: { actor: Actor; children: React.Re
             <NavLinks role={actor.role} onNavigate={() => setMobileOpen(false)} />
             <div>
               {identity}
+              <ThemeToggle />
               <LogoutButton />
             </div>
           </div>
@@ -152,7 +199,9 @@ export function AppShell({ actor, children }: { actor: Actor; children: React.Re
       )}
 
       {/* Content */}
-      <main className="min-w-0 flex-1 px-4 pb-16 pt-20 lg:ml-60 lg:px-8 lg:pt-8">{children}</main>
+      <main className="min-w-0 flex-1 px-5 pb-20 pt-22 lg:ml-60 lg:px-12 lg:pb-24 lg:pt-12">
+        <div className="mx-auto max-w-[1400px]">{children}</div>
+      </main>
     </div>
   );
 }
@@ -170,9 +219,9 @@ export function PageHeader({
   className?: string;
 }) {
   return (
-    <div className={cn("mb-8 flex flex-wrap items-end justify-between gap-4", className)}>
+    <div className={cn("mb-10 flex flex-wrap items-end justify-between gap-5", className)}>
       <div>
-        <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+        <p className="mb-3 font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
           — {kicker}
         </p>
         <h1 className="font-display text-4xl font-extrabold uppercase text-foreground md:text-5xl">

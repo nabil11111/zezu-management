@@ -75,13 +75,13 @@ function MyShiftsPage() {
       ) : null}
 
       {/* Monthly totals */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
         {data.monthly.map((m) => (
           <Card key={m.month}>
             <CardHeader>
               <CardTitle>{monthLabel(m.month)}</CardTitle>
             </CardHeader>
-            <CardBody className="grid grid-cols-3 gap-2 text-center">
+            <CardBody className="grid grid-cols-3 gap-3 text-center">
               <div>
                 <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
                   verified

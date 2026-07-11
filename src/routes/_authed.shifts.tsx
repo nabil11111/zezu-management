@@ -64,7 +64,7 @@ function ShiftsPage() {
           hint="You don't have any shops assigned yet — ask the CEO to add you."
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
           {board.shopToday.map((s) => (
             <ShopDayCard key={s.locationId} shop={s} />
           ))}
@@ -126,29 +126,27 @@ function ShiftsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b-2 border-foreground/15 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                    <th className="px-4 py-2.5 text-left">Crew</th>
-                    <th className="px-4 py-2.5 text-left">Location</th>
-                    <th className="px-4 py-2.5 text-left">In</th>
-                    <th className="px-4 py-2.5 text-left">Out</th>
-                    <th className="px-4 py-2.5 text-left">Hours</th>
-                    <th className="px-4 py-2.5 text-left">Status</th>
+                    <th className="px-4 py-3 text-left">Crew</th>
+                    <th className="px-4 py-3 text-left">Location</th>
+                    <th className="px-4 py-3 text-left">In</th>
+                    <th className="px-4 py-3 text-left">Out</th>
+                    <th className="px-4 py-3 text-left">Hours</th>
+                    <th className="px-4 py-3 text-left">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredRecent.map((r) => (
                     <tr key={r.id} className="border-b border-foreground/10 last:border-b-0">
-                      <td className="px-4 py-2.5 font-bold text-foreground">{r.memberName}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{r.locationName}</td>
-                      <td className="px-4 py-2.5 font-mono text-xs">
-                        {formatDateTime(r.clockInAt)}
-                      </td>
-                      <td className="px-4 py-2.5 font-mono text-xs">
+                      <td className="px-4 py-3 font-bold text-foreground">{r.memberName}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{r.locationName}</td>
+                      <td className="px-4 py-3 font-mono text-xs">{formatDateTime(r.clockInAt)}</td>
+                      <td className="px-4 py-3 font-mono text-xs">
                         {r.clockOutAt ? formatDateTime(r.clockOutAt) : "—"}
                       </td>
-                      <td className="px-4 py-2.5 font-mono text-xs">
+                      <td className="px-4 py-3 font-mono text-xs">
                         {r.hours != null ? r.hours.toFixed(2) : "—"}
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-4 py-3">
                         <StatusBadge status={r.status} />
                       </td>
                     </tr>
@@ -214,7 +212,7 @@ function ShopDayCard({ shop }: { shop: ShopTodayEntry }) {
           {isOpen ? "Open" : "Not opened"}
         </span>
       </CardHeader>
-      <CardBody className="flex flex-col gap-3">
+      <CardBody className="flex flex-col gap-4">
         {isOpen && shop.shopDay ? (
           <p className="text-sm text-muted-foreground">
             Open since{" "}
@@ -236,7 +234,7 @@ function ShopDayCard({ shop }: { shop: ShopTodayEntry }) {
               title="Close the shop?"
               description={`This ends ${shop.locationName}'s day. Anyone still on the clock stays open until they tap out.`}
             >
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-3">
                 <DialogClose asChild>
                   <Button variant="outline" size="sm">
                     Cancel
@@ -295,7 +293,7 @@ function PendingRow({ shift }: { shift: ShiftEntry }) {
           {shift.hours != null ? ` · ${shift.hours.toFixed(2)} hrs` : ""}
         </p>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <Button
           size="sm"
           onClick={() => handle("verify")}

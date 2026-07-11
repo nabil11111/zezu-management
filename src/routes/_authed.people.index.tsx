@@ -34,7 +34,12 @@ export const Route = createFileRoute("/_authed/people/")({
 type PeopleMember = Awaited<ReturnType<typeof listMembers>>[number];
 type LocationOption = Awaited<ReturnType<typeof listLocationOptions>>[number];
 
-const ROLE_LABEL: Record<MemberRole, string> = { ceo: "CEO", manager: "Manager", staff: "Crew" };
+const ROLE_LABEL: Record<MemberRole, string> = {
+  ceo: "CEO",
+  manager: "Manager",
+  staff: "Crew",
+  warehouse: "Warehouse",
+};
 
 function RoleBadge({ role }: { role: MemberRole }) {
   if (role === "ceo") {
@@ -45,7 +50,8 @@ function RoleBadge({ role }: { role: MemberRole }) {
     );
   }
   if (role === "manager") return <Badge tone="pop">Manager</Badge>;
-  return <Badge tone="neutral">Crew</Badge>;
+  if (role === "warehouse") return <Badge tone="outline">Warehouse</Badge>;
+  return <Badge tone="neutral">{ROLE_LABEL[role] ?? role}</Badge>;
 }
 
 function ChipButton({
@@ -100,8 +106,8 @@ function PeoplePage() {
       <PageHeader kicker="ZEZU Operations" title="People" actions={addButton} />
 
       {members.length > 0 ? (
-        <div className="mb-6 flex flex-wrap items-center gap-4">
-          <div className="flex flex-wrap items-center gap-1.5">
+        <div className="mb-8 flex flex-wrap items-center gap-4">
+          <div className="flex flex-wrap items-center gap-2">
             <ChipButton active={locationFilter === "all"} onClick={() => setLocationFilter("all")}>
               All sites
             </ChipButton>
@@ -115,7 +121,7 @@ function PeoplePage() {
               </ChipButton>
             ))}
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-2">
             <ChipButton active={roleFilter === "all"} onClick={() => setRoleFilter("all")}>
               All roles
             </ChipButton>
@@ -142,7 +148,7 @@ function PeoplePage() {
           hint="Try a different site or role filter."
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map((m) => (
             <MemberCard key={m.id} member={m} />
           ))}
@@ -166,13 +172,13 @@ function MemberCard({ member }: { member: PeopleMember }) {
           !member.active && "opacity-50",
         )}
       >
-        <CardBody className="flex h-full flex-col gap-3">
+        <CardBody className="flex h-full flex-col gap-4">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="truncate font-display text-2xl uppercase text-foreground">
                 {member.name}
               </p>
-              <p className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                 {member.locations.map((l) => l.name).join(" · ") || "No site assigned"}
               </p>
             </div>
@@ -182,7 +188,7 @@ function MemberCard({ member }: { member: PeopleMember }) {
             </div>
           </div>
 
-          <div className="mt-auto grid grid-cols-2 gap-3 border-t-2 border-foreground/10 pt-3">
+          <div className="mt-auto grid grid-cols-2 gap-4 border-t-2 border-foreground/10 pt-4">
             <div>
               <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
                 Onboarding
@@ -307,11 +313,11 @@ function AddMemberDialog({ locationOptions }: { locationOptions: LocationOption[
             </Button>
           </div>
         ) : (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-5">
             <Field label="Name">
               <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} />
             </Field>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4">
               <Field label="Role">
                 <Select value={role} onValueChange={(v) => setRole(v as MemberRole)}>
                   <SelectTrigger>
@@ -337,7 +343,7 @@ function AddMemberDialog({ locationOptions }: { locationOptions: LocationOption[
                 />
               </Field>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4">
               <Field label="Phone">
                 <Input
                   value={phone}
@@ -357,7 +363,7 @@ function AddMemberDialog({ locationOptions }: { locationOptions: LocationOption[
               {locationOptions.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No sites set up yet.</p>
               ) : (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-3">
                   {locationOptions.map((loc) => {
                     const active = selectedLocations.includes(loc.id);
                     return (

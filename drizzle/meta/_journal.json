@@ -8,6 +8,13 @@
       "when": 1783780122906,
       "tag": "0000_furry_skullbuster",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783787487867,
+      "tag": "0001_slimy_kat_farrell",
+      "breakpoints": true
     }
   ]
 }

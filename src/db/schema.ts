@@ -47,9 +47,10 @@ export const locationsRelations = relations(locations, ({ many }) => ({
 // ── members (everyone: CEO, managers, staff) ─────────────────────────────
 // No usernames/passwords — one unique 4-digit code each, stored hashed
 // (HMAC-SHA256 keyed with SESSION_SECRET). Role decides what the code opens:
-//   ceo     → everything, every location
-//   manager → their assigned locations only; opens the shop, verifies shifts
-//   staff   → clock in/out via QR, own shifts/hours, menu & training
+//   ceo       → everything, every location
+//   manager   → their assigned locations only; opens the shop, verifies shifts
+//   staff     → clock in/out via QR, own shifts/hours, menu & training, stock orders
+//   warehouse → sees every branch's stock orders, dispatches them
 export const members = pgTable("members", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
@@ -196,6 +197,60 @@ export const stockMoves = pgTable("stock_moves", {
 export const stockMovesRelations = relations(stockMoves, ({ one }) => ({
   item: one(stockItems, { fields: [stockMoves.stockItemId], references: [stockItems.id] }),
   by: one(members, { fields: [stockMoves.byMemberId], references: [members.id] }),
+}));
+
+// ── stock_orders (branch → warehouse → branch verification) ──────────────
+// A branch employee places the day's order; the warehouse sees it, sends
+// the items (adjusting quantities if short); the branch verifies what
+// actually arrived. Verification writes 'delivery' stock_moves, so levels
+// update from what was RECEIVED, not what was promised.
+export const stockOrders = pgTable("stock_orders", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  locationId: uuid("location_id")
+    .notNull()
+    .references(() => locations.id),
+  // 'placed' | 'sent' | 'received' | 'cancelled'
+  status: text("status").notNull().default("placed"),
+  note: text("note"),
+  placedBy: uuid("placed_by")
+    .notNull()
+    .references(() => members.id),
+  placedAt: timestamp("placed_at", { withTimezone: true }).notNull().defaultNow(),
+  sentBy: uuid("sent_by").references(() => members.id),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  sentNote: text("sent_note"),
+  receivedBy: uuid("received_by").references(() => members.id),
+  receivedAt: timestamp("received_at", { withTimezone: true }),
+  ...timestamps,
+});
+
+export const stockOrdersRelations = relations(stockOrders, ({ one, many }) => ({
+  location: one(locations, { fields: [stockOrders.locationId], references: [locations.id] }),
+  placer: one(members, { fields: [stockOrders.placedBy], references: [members.id] }),
+  sender: one(members, { fields: [stockOrders.sentBy], references: [members.id] }),
+  receiver: one(members, { fields: [stockOrders.receivedBy], references: [members.id] }),
+  items: many(stockOrderItems),
+}));
+
+export const stockOrderItems = pgTable("stock_order_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orderId: uuid("order_id")
+    .notNull()
+    .references(() => stockOrders.id),
+  stockItemId: uuid("stock_item_id")
+    .notNull()
+    .references(() => stockItems.id),
+  quantityOrdered: numeric("quantity_ordered").notNull(),
+  // What the warehouse actually dispatched (null until sent).
+  quantitySent: numeric("quantity_sent"),
+  // What the branch counted off the van (null until verified).
+  quantityReceived: numeric("quantity_received"),
+  note: text("note"),
+});
+
+export const stockOrderItemsRelations = relations(stockOrderItems, ({ one }) => ({
+  order: one(stockOrders, { fields: [stockOrderItems.orderId], references: [stockOrders.id] }),
+  item: one(stockItems, { fields: [stockOrderItems.stockItemId], references: [stockItems.id] }),
 }));
 
 // ── menu_items (BRAND-LEVEL: every location inherits the menu) ───────────

@@ -102,6 +102,50 @@
   --sidebar-ring: #ea2526;
 }
 
+/* Light mode — warm paper, ink type, same red/gold attitude. Toggled by
+   swapping .dark → .light on <html> (see ThemeToggle in app-shell). The QR
+   poster pins `dark` on its own root so printed posters stay on-brand black
+   whatever the app theme is. */
+.light {
+  --pop: #ea2526;
+  --pop-deep: #c41f20;
+  --ink: #f2ede6; /* still what you write ON red */
+  --gold: #a07c22; /* darkened for legibility on paper */
+
+  --background: #f5efe3;
+  --foreground: #1b1510;
+  --card: #fbf7ee;
+  --card-foreground: #1b1510;
+  --popover: #fbf7ee;
+  --popover-foreground: #1b1510;
+  --primary: #ea2526;
+  --primary-foreground: #f2ede6;
+  --secondary: #ebe3d2;
+  --secondary-foreground: #1b1510;
+  --muted: #ede6d6;
+  --muted-foreground: #6e6455;
+  --accent: #ea2526;
+  --accent-foreground: #f2ede6;
+  --destructive: #c41f20;
+  --destructive-foreground: #f2ede6;
+  --border: rgba(27, 21, 16, 0.16);
+  --input: rgba(27, 21, 16, 0.16);
+  --ring: #ea2526;
+  --chart-1: #ea2526;
+  --chart-2: #c99b3f;
+  --chart-3: #1b1510; /* dine-in flips to ink — off-white vanishes on paper */
+  --chart-4: #c41f20;
+  --chart-5: #8a8071;
+  --sidebar: #efe8d8;
+  --sidebar-foreground: #1b1510;
+  --sidebar-primary: #ea2526;
+  --sidebar-primary-foreground: #f2ede6;
+  --sidebar-accent: #e6ddc9;
+  --sidebar-accent-foreground: #1b1510;
+  --sidebar-border: rgba(27, 21, 16, 0.12);
+  --sidebar-ring: #ea2526;
+}
+
 @layer base {
   * {
     border-color: var(--color-border);

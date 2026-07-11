@@ -25,7 +25,7 @@ const SESSION_COOKIE = "zezu_session";
 const THIRTY_DAYS_SECONDS = 60 * 60 * 24 * 30;
 const THIRTY_DAYS_MS = THIRTY_DAYS_SECONDS * 1000;
 
-export type MemberRole = "ceo" | "manager" | "staff";
+export type MemberRole = "ceo" | "manager" | "staff" | "warehouse";
 
 /** The signed-in identity, resolved from the session cookie. */
 export interface Actor {
@@ -170,6 +170,28 @@ export async function requireManager(): Promise<{
     throw new Error("Managers only");
   }
   return { actor, locationIds: await getActorLocationIds(actor) };
+}
+
+/** Warehouse or CEO — sees and dispatches every branch's stock orders. */
+export async function requireWarehouse(): Promise<Actor> {
+  const actor = await requireAuth();
+  if (actor.role !== "ceo" && actor.role !== "warehouse") {
+    throw new Error("Warehouse only");
+  }
+  return actor;
+}
+
+/**
+ * Any member assigned to the given location (staff included), or the CEO.
+ * The stock-order flow uses this: placing and verifying orders is branch
+ * work, done by whoever is actually standing in the shop.
+ */
+export async function requireLocationMember(locationId: string): Promise<Actor> {
+  const actor = await requireAuth();
+  if (actor.role === "ceo") return actor;
+  const locationIds = await getActorLocationIds(actor);
+  assertLocationAccess(locationIds, locationId);
+  return actor;
 }
 
 /** CEO only (locations, team codes, brand settings). */

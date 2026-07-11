@@ -10,9 +10,20 @@ import { z } from "zod";
 
 // ── role / status unions (mirror the comments in src/db/schema.ts) ──────────
 
-export const MEMBER_ROLES = ["ceo", "manager", "staff"] as const;
+export const MEMBER_ROLES = ["ceo", "manager", "staff", "warehouse"] as const;
 export const memberRoleSchema = z.enum(MEMBER_ROLES);
 export type MemberRole = z.infer<typeof memberRoleSchema>;
+
+export const ORDER_STATUSES = ["placed", "sent", "received", "cancelled"] as const;
+export const orderStatusSchema = z.enum(ORDER_STATUSES);
+export type OrderStatus = z.infer<typeof orderStatusSchema>;
+
+export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
+  placed: "Placed",
+  sent: "On the van",
+  received: "Received",
+  cancelled: "Cancelled",
+};
 
 export const SHIFT_STATUSES = ["pending", "verified", "rejected"] as const;
 export const shiftStatusSchema = z.enum(SHIFT_STATUSES);
