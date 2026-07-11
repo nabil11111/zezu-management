@@ -20,7 +20,7 @@ export function QrPoster({ locationName, clockUrl }: { locationName: string; clo
       <span className="pointer-events-none absolute bottom-5 left-5 h-8 w-8 border-b-2 border-l-2 border-pop" />
       <span className="pointer-events-none absolute bottom-5 right-5 h-8 w-8 border-b-2 border-r-2 border-pop" />
 
-      <ZezuLogo className="mt-2 text-3xl sm:text-4xl" subtitle="Operations" />
+      <ZezuLogo className="mt-2 h-24 sm:h-28" subtitle="Operations" />
       <p className="mt-3 font-chinese text-xs tracking-[0.5em] text-gold/80">
         正宗 · 现代 · 利物浦
       </p>

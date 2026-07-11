@@ -1,57 +1,38 @@
 import { cn } from "@/lib/utils";
 
 /**
- * The ZEZU wordmark — bold condensed caps with the brand red, and an
- * optional Chinese accent line (正宗 · 现代 · 利物浦). Pure type, no image
- * assets, so it scales anywhere from the sidebar to the login screen.
+ * The real ZEZU logo from zezu.co.uk (/public/zezu-logo.png, transparent):
+ * red ZEZU with the bowl-and-chopsticks U, gold "The Modern Chinese"
+ * tagline baked in. `className` sizes the IMAGE (set a height, e.g. h-10 —
+ * width follows the logo's aspect ratio).
  */
 export function ZezuLogo({
   className,
   animate = false,
   subtitle,
 }: {
+  /** Applied to the img — set a height (h-8, h-28, …); defaults to h-10. */
   className?: string;
   animate?: boolean;
-  /** Small mono line under the wordmark, e.g. "OPERATIONS". */
+  /** Small mono line under the logo, e.g. "OPERATIONS". */
   subtitle?: string;
 }) {
-  const letters = ["Z", "E", "Z", "U"];
   return (
-    <span className={cn("inline-flex flex-col items-center leading-none", className)}>
-      <span className="flex items-baseline">
-        {letters.map((letter, i) => (
-          <span
-            key={i}
-            className={cn(
-              "font-display text-[2.6em] font-extrabold uppercase leading-[0.85]",
-              i >= 2 ? "text-pop" : "text-foreground",
-              animate && "letter-pop",
-            )}
-            style={
-              animate
-                ? {
-                    animationDelay: `${i * 90}ms`,
-                    ["--pop-from" as string]: i % 2 ? "-48px" : "-28px",
-                    ["--pop-rot" as string]: i % 2 ? "-8deg" : "8deg",
-                  }
-                : undefined
-            }
-          >
-            {letter}
-          </span>
-        ))}
+    <span className="inline-flex flex-col items-center">
+      <img
+        src="/zezu-logo.png"
+        alt="ZEZU — The Modern Chinese"
+        draggable={false}
+        className={cn("w-auto select-none", animate && "fade-up", className ?? "h-10")}
+      />
+      {subtitle ? (
         <span
           className={cn(
-            "ml-1.5 self-start font-chinese text-[0.8em] leading-none text-gold",
+            "mt-2 font-mono text-[10px] font-bold uppercase tracking-[0.4em] text-muted-foreground",
             animate && "fade-up",
           )}
-          style={animate ? { animationDelay: "420ms" } : undefined}
+          style={animate ? { animationDelay: "250ms" } : undefined}
         >
-          泽
-        </span>
-      </span>
-      {subtitle ? (
-        <span className="mt-[0.5em] font-mono text-[0.55em] font-bold uppercase tracking-[0.4em] text-muted-foreground">
           {subtitle}
         </span>
       ) : null}

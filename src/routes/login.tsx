@@ -64,7 +64,7 @@ function LoginPage() {
       </div>
 
       <div className="relative z-10 flex w-full max-w-sm flex-col items-center">
-        <ZezuLogo animate className="text-4xl" subtitle="Operations" />
+        <ZezuLogo animate className="h-28 md:h-32" subtitle="Operations" />
         <p className="mt-4 font-chinese text-xs tracking-[0.5em] text-gold/80">
           正宗 · 现代 · 利物浦
         </p>

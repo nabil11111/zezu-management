@@ -45,7 +45,7 @@ function PosterFrame({ children }: { children: React.ReactNode }) {
 function ClockErrorScreen() {
   return (
     <PosterFrame>
-      <ZezuLogo className="text-3xl" />
+      <ZezuLogo className="h-20" />
       <p className="mt-10 font-display text-3xl uppercase leading-tight text-foreground">
         This poster isn&apos;t active
       </p>
@@ -235,7 +235,7 @@ function ClockPage() {
 
   return (
     <PosterFrame>
-      <ZezuLogo className="text-3xl" />
+      <ZezuLogo className="h-20" />
       <p className="mt-6 font-display text-3xl uppercase leading-none text-foreground md:text-4xl">
         {context.locationName}
       </p>

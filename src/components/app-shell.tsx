@@ -106,7 +106,7 @@ export function AppShell({ actor, children }: { actor: Actor; children: React.Re
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r-2 border-foreground/15 bg-sidebar lg:flex">
         <Link to="/" className="flex items-center border-b-2 border-foreground/15 px-5 py-4">
-          <ZezuLogo className="text-base" />
+          <ZezuLogo className="h-10" />
           <span className="ml-3 mt-1 font-mono text-[9px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
             OPS
           </span>
@@ -123,7 +123,7 @@ export function AppShell({ actor, children }: { actor: Actor; children: React.Re
       {/* Mobile top bar */}
       <header className="fixed inset-x-0 top-0 z-40 flex items-center justify-between border-b-2 border-foreground/15 bg-background px-4 py-3 lg:hidden">
         <Link to="/" onClick={() => setMobileOpen(false)}>
-          <ZezuLogo className="text-sm" />
+          <ZezuLogo className="h-8" />
         </Link>
         <button
           onClick={() => setMobileOpen((v) => !v)}
