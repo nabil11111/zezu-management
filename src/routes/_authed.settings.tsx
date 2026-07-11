@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Plus, Pencil, QrCode, Printer, RefreshCw, MapPin } from "lucide-react";
@@ -338,6 +339,15 @@ function PosterDialog({ location, onClose }: { location: LocationAdminRow; onClo
           <QrPoster locationName={location.name} clockUrl={clockUrl} />
         </div>
       </DialogContent>
+      {/* Print-only copy, portaled straight under <body>: the dialog's
+          transform makes anything inside it unpaginatable, so the print CSS
+          hides the whole app and prints only this (see styles.css). */}
+      {createPortal(
+        <div className="qr-poster-print">
+          <QrPoster locationName={location.name} clockUrl={clockUrl} />
+        </div>,
+        document.body,
+      )}
     </Dialog>
   );
 }
