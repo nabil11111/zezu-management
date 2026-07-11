@@ -1,0 +1,318 @@
+@import url("https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500;600;700;800&family=DM+Sans:wght@300;400;500;700&family=Noto+Serif+SC:wght@400;700&family=Space+Mono:wght@400;700&display=swap");
+
+@import "tailwindcss" source(none);
+@import "tw-animate-css";
+
+@source "../src";
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * ZEZU design system — "The Modern Chinese".
+ * Red #EA2526 · gold #E8C882 · near-black #080808 · warm off-white #F2EDE6.
+ * Bold condensed display type, street-style attitude, hairline borders.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --font-display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue Condensed", sans-serif;
+  --font-sans: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Space Mono", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  --font-chinese: "Noto Serif SC", serif;
+  /* pop = the ZEZU red; ink = what you write on it; gold = the accent. */
+  --color-pop: var(--pop);
+  --color-ink: var(--ink);
+  --color-gold: var(--gold);
+}
+
+:root,
+.dark {
+  --radius: 0;
+  --pop: #ea2526; /* ZEZU red */
+  --pop-deep: #c41f20; /* hover / pressed red */
+  --ink: #f2ede6; /* warm off-white ON red */
+  --gold: #e8c882; /* ZEZU gold */
+
+  --background: #080808; /* page black */
+  --foreground: #f2ede6; /* warm off-white */
+  --card: #141414; /* raised panel */
+  --card-foreground: #f2ede6;
+  --popover: #111111;
+  --popover-foreground: #f2ede6;
+  --primary: #ea2526; /* red = action */
+  --primary-foreground: #f2ede6;
+  --secondary: #1c1c1c;
+  --secondary-foreground: #f2ede6;
+  --muted: #171717;
+  --muted-foreground: #9a938a; /* warm muted */
+  --accent: #ea2526;
+  --accent-foreground: #f2ede6;
+  --destructive: #ff4d42;
+  --destructive-foreground: #f2ede6;
+  --border: rgba(242, 237, 230, 0.14); /* hairlines */
+  --input: rgba(242, 237, 230, 0.14);
+  --ring: #ea2526;
+  --chart-1: #ea2526; /* red — Uber */
+  --chart-2: #e8c882; /* gold — takeaway */
+  --chart-3: #f2ede6; /* off-white — dine-in */
+  --chart-4: #c41f20;
+  --chart-5: #777777;
+  --sidebar: #0d0d0d;
+  --sidebar-foreground: #f2ede6;
+  --sidebar-primary: #ea2526;
+  --sidebar-primary-foreground: #f2ede6;
+  --sidebar-accent: #171717;
+  --sidebar-accent-foreground: #f2ede6;
+  --sidebar-border: rgba(242, 237, 230, 0.1);
+  --sidebar-ring: #ea2526;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    overflow-x: hidden;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    overflow-wrap: break-word;
+  }
+
+  img,
+  video,
+  svg,
+  canvas {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .font-display {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    line-height: 0.92;
+  }
+
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+
+  .font-chinese {
+    font-family: var(--font-chinese);
+  }
+}
+
+@utility tracking-display {
+  letter-spacing: 0.32em;
+}
+
+/* Neo shadows: hard offset blocks, no blur — the brand's poster energy. */
+@utility shadow-neo {
+  box-shadow: 4px 4px 0px 0px var(--color-foreground);
+}
+@utility shadow-neo-sm {
+  box-shadow: 2px 2px 0px 0px var(--color-foreground);
+}
+@utility shadow-pop {
+  box-shadow: 4px 4px 0px 0px var(--color-pop);
+}
+@utility shadow-gold {
+  box-shadow: 4px 4px 0px 0px var(--color-gold);
+}
+
+@keyframes shake-x {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-6px);
+  }
+  40% {
+    transform: translateX(6px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(4px);
+  }
+}
+.shake {
+  animation: shake-x 0.4s ease-in-out;
+}
+
+@keyframes letter-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(var(--pop-from, -40px)) scale(0.3) rotate(var(--pop-rot, 8deg));
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(6px) scale(1.06) rotate(0deg);
+  }
+  80% {
+    transform: translateY(-2px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.letter-pop {
+  animation: letter-pop 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.fade-up {
+  animation: fade-up 1.2s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* Live "open" indicator on the site cards. */
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.8);
+  }
+}
+.pulse-dot {
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+/* Film-grain texture for the login screen. */
+@keyframes grain {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  10% {
+    transform: translate(-5%, -10%);
+  }
+  30% {
+    transform: translate(3%, -15%);
+  }
+  50% {
+    transform: translate(12%, 9%);
+  }
+  70% {
+    transform: translate(-9%, 4%);
+  }
+  90% {
+    transform: translate(8%, -8%);
+  }
+}
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.6 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  opacity: 0.18;
+  mix-blend-mode: overlay;
+  animation: grain 8s steps(8) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shake,
+  .letter-pop,
+  .fade-up,
+  .pulse-dot,
+  .grain::after {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}
+
+/* ── QR poster printing ──────────────────────────────────────────────────
+   Settings prints the door poster via the browser's print dialog. Only the
+   poster prints; app chrome disappears. Same trick as polarity's doc-sheet. */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+  html,
+  body {
+    background: #080808 !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .qr-poster,
+  .qr-poster * {
+    visibility: visible;
+  }
+  .qr-poster {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 210mm !important;
+    min-height: 297mm !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

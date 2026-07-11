@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- ZEZU tab mark: brand red tile, warm off-white Z, gold accent dot. -->
+  <rect width="64" height="64" rx="8" fill="#EA2526"/>
+  <path d="M14 14h34v9L26.5 41H48v9H14v-9l21.5-18H14z" fill="#F2EDE6"/>
+  <circle cx="53" cy="53" r="5" fill="#E8C882"/>
+</svg>
