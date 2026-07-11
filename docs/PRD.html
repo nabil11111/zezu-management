@@ -89,6 +89,13 @@
 
   .two-col { display: flex; gap: 8mm; }
   .two-col > div { flex: 1; }
+
+  /* ── access role cards (dark page) ── */
+  .roles { display: flex; gap: 5mm; margin: 7mm 0 6mm; }
+  .role { flex: 1; background: var(--panel); border: 1px solid #2a2a2a; border-top: 3px solid var(--gold); padding: 5mm; }
+  .role h4 { font-family: "Barlow Condensed", sans-serif; font-weight: 800; font-size: 15pt; text-transform: uppercase; color: var(--paper); }
+  .role .scope { font-size: 7.5pt; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: var(--red); margin: .5mm 0 2.5mm; }
+  .role p { font-size: 9pt; color: #b8b1a6; line-height: 1.55; }
 </style>
 </head>
 <body>
@@ -157,7 +164,8 @@
     <span class="num">01 / PEOPLE</span>
     <h3>Every person, sorted from day one</h3>
     <p>A profile for every member of staff across the three sites: role, site, contact,
-    documents and pay rate. New hires get a ready-made onboarding checklist — documents in,
+    documents and pay rate — and one unique 4-digit code each. No usernames, no passwords,
+    nothing to forget. New hires get a ready-made onboarding checklist — documents in,
     training videos watched, trial shift done — so nobody starts a Friday shift half-set-up.
     Salaries aren't typed in from memory: they're calculated from the verified hours each
     person actually worked (more on that on the clock-in page).</p>
@@ -217,10 +225,11 @@
   <div class="mod">
     <span class="num">06 / CLOCK-IN</span>
     <h3>Scan in, verified by the manager, paid to the minute</h3>
-    <p>A ZEZU-branded QR poster by the door of each site. Staff scan it on their own phone to
-    clock in and out; the shift manager gets a one-tap verification, so nobody can scan in
-    from their sofa. Those verified hours build each person's timesheet automatically — and
-    that timesheet is exactly what the People module uses to calculate salaries.</p>
+    <p>The manager opens the shop with their code — that's what starts the day. From then on,
+    staff scan the ZEZU-branded QR poster by the door and tap in their 4-digit code to clock
+    in and out; the manager gets a one-tap verification, so nobody clocks in from their sofa.
+    Those verified hours build each person's timesheet automatically — and that timesheet is
+    exactly what the People module uses to calculate salaries.</p>
     <div class="win"><b>The win</b> Hours are fair and provable in both directions — staff trust the count, and so do you.</div>
   </div>
 
@@ -233,14 +242,14 @@
   <p class="kicker">— 03 · The UX, on a real day</p>
   <h2>How clocking in feels</h2>
   <div class="steps">
-    <div class="step"><span class="n">1</span><b>Scan</b><p>Aisha arrives at Lodge Lane, scans the poster by the door with her phone. No app to install — it just opens.</p></div>
-    <div class="step"><span class="n">2</span><b>Confirm</b><p>Her name and the time appear. One tap — "Start shift." It takes less time than tying an apron.</p></div>
-    <div class="step"><span class="n">3</span><b>Verify</b><p>The shift manager's screen shows "Aisha — clock-in, 16:58". One tap to confirm she's actually here.</p></div>
+    <div class="step"><span class="n">1</span><b>Scan</b><p>Aisha arrives at Lodge Lane and scans the poster by the door with her phone. No app to install — it just opens.</p></div>
+    <div class="step"><span class="n">2</span><b>Code in</b><p>She taps in her own 4-digit code — no username, no password. One tap more: "Start shift." Quicker than tying an apron.</p></div>
+    <div class="step"><span class="n">3</span><b>Verify</b><p>The manager's screen shows "Aisha — clock-in, 16:58". One tap to confirm she's actually here.</p></div>
     <div class="step"><span class="n">4</span><b>Paid right</b><p>At month end her verified hours × her rate are already added up. Nothing typed, nothing argued.</p></div>
   </div>
 
   <h2 style="margin-top:8mm;">…and how a day runs</h2>
-  <div class="slot"><span class="t">10:45</span><div class="body"><b>Open-up, Wallasey.</b><p>The opener scans in; the manager verifies. Your live view flips Wallasey to "open — 2 on shift".</p></div></div>
+  <div class="slot"><span class="t">10:45</span><div class="body"><b>The manager opens Wallasey.</b><p>Their code starts the day — the shop can't open without them. Your live view flips Wallasey to "open", and crew clock-ins start landing for their one-tap verification.</p></div></div>
   <div class="slot"><span class="t">12:30</span><div class="body"><b>Delivery arrives.</b><p>New stock is logged in as it comes off the van — thirty seconds, and the running levels update.</p></div></div>
   <div class="slot"><span class="t">17:00</span><div class="body"><b>Friday rush builds.</b><p>Evening crew scan in one by one. You watch all three sites staff up from your sofa — no calls made.</p></div></div>
   <div class="slot"><span class="t">22:40</span><div class="body"><b>Close-down.</b><p>Each manager logs the day's usage and the three sales numbers. Two minutes each, then lights off.</p></div></div>
@@ -259,34 +268,74 @@
     the attitude. When a new hire opens their onboarding, or a manager checks the live view,
     it should feel like the same brand that made the shop worth queuing at.
   </p>
-  <div class="two-col" style="margin-top:9mm;">
-    <div>
-      <h3 style="color:var(--gold); font-size:14pt; margin-bottom:3mm;">Designed for real hands</h3>
-      <ul class="clean" style="color:#c9c2b6;">
-        <li>Phone-first for staff — scan, tap, done, with wet-hands-sized buttons.</li>
-        <li>Big-screen mode for the office — the live view runs happily on a wall display.</li>
-        <li>Every daily task designed to take under two minutes, timed with your team.</li>
-        <li>English-plain labels; no jargon, no manuals needed.</li>
-      </ul>
+  <h3 style="color:var(--gold); font-size:15pt; margin-top:9mm;">No usernames. No passwords. One code each.</h3>
+  <p style="color:#c9c2b6; max-width:150mm; margin-top:2mm;">
+    Everyone at ZEZU carries exactly one thing to remember — their own 4-digit code.
+    What that code opens depends on who you are:
+  </p>
+  <div class="roles">
+    <div class="role">
+      <h4>CEO</h4>
+      <p class="scope">Everything · every location</p>
+      <p>The whole picture: all sites' live views, sales, stock, people and salaries — plus
+      the change log of who did what, when, anywhere in the business.</p>
     </div>
-    <div>
-      <h3 style="color:var(--gold); font-size:14pt; margin-bottom:3mm;">Private &amp; accountable</h3>
-      <ul class="clean" style="color:#c9c2b6;">
-        <li>Every person gets their own sign-in — staff, managers and owners see different things.</li>
-        <li>Staff see their shifts and hours; managers run their site; owners see everything.</li>
-        <li>Every change is logged with a name and a time — quiet accountability, no drama.</li>
-        <li>Someone leaves? One tap and their access is gone that second.</li>
-      </ul>
+    <div class="role">
+      <h4>Manager</h4>
+      <p class="scope">Their locations only</p>
+      <p>Opens the shop, verifies clock-ins, logs the day's stock and sales, runs their crew.
+      A Lodge Lane manager sees Lodge Lane — nothing else, no accidents.</p>
+    </div>
+    <div class="role">
+      <h4>Staff</h4>
+      <p class="scope">Scan the QR · code in</p>
+      <p>Clock in and out, see their own shifts and hours, watch the menu and training
+      videos. Nothing to manage, nothing they shouldn't see.</p>
     </div>
   </div>
-  <p class="zh" style="color:var(--gold); letter-spacing:.4em; margin-top:12mm; font-size:11pt;">正宗 · 现代 · 利物浦</p>
+  <ul class="clean" style="color:#c9c2b6; max-width:155mm;">
+    <li>Every change is logged with a name and a time — quiet accountability, no drama.</li>
+    <li>Someone leaves? Their code is switched off in one tap, effective that second.</li>
+    <li>Phone-first for staff, big-screen mode for the office wall; every daily task designed to take under two minutes.</li>
+  </ul>
+  <p class="zh" style="color:var(--gold); letter-spacing:.4em; margin-top:9mm; font-size:11pt;">正宗 · 现代 · 利物浦</p>
   <div class="footbrand" style="color:#6f6a63;">Zezu Operations — Proposal</div>
   <div class="pagenum" style="color:#6f6a63;">06</div>
 </div>
 
+<!-- ─────────── FRANCHISE ─────────── -->
+<div class="page">
+  <p class="kicker">— 05 · Built to franchise</p>
+  <h2>A new location is a<br />switch-on, not a project</h2>
+  <p class="lede">
+    ZEZU grows by franchise — so the dashboard is designed from day one to be copied.
+    Everything that makes a shop a ZEZU shop — the menu, the dish videos, the training,
+    the stock lists, the way a day is run — lives in one brand library that every
+    location inherits. Opening the next site looks like this:
+  </p>
+  <div class="steps" style="margin-top:8mm;">
+    <div class="step"><span class="n">1</span><b>Name the site</b><p>The new location appears with its own card on the live view, its own sales and stock ledgers — empty and ready.</p></div>
+    <div class="step"><span class="n">2</span><b>Print the posters</b><p>Its own ZEZU QR posters come out ready to frame. Scanning them clocks staff into that shop and no other.</p></div>
+    <div class="step"><span class="n">3</span><b>Set the codes</b><p>The franchise manager gets a code scoped to their location; crew get theirs as they're onboarded.</p></div>
+    <div class="step"><span class="n">4</span><b>Open the doors</b><p>Menu, videos, training and stock lists are already there — inherited from the brand library, day one.</p></div>
+  </div>
+  <div class="pull">
+    Same brand, same standards, same screen — <span class="accent">whether it's shop
+    three or shop thirty.</span>
+  </div>
+  <p style="max-width:150mm;">
+    Franchisees run their own shop and see their own numbers — and only theirs. You see all
+    of them, side by side, on the same live view: which locations are open, how each is
+    trading today, and whether the brand standard is being kept everywhere it carries the
+    ZEZU name.
+  </p>
+  <div class="footbrand">Zezu Operations — Proposal</div>
+  <div class="pagenum">07</div>
+</div>
+
 <!-- ─────────── PLAN ─────────── -->
 <div class="page">
-  <p class="kicker">— 05 · How we'll tackle it</p>
+  <p class="kicker">— 06 · How we'll tackle it</p>
   <h2>Small start, fast proof,<br />then all three sites</h2>
 
   <div class="phase"><span class="pn">P1</span><div>
@@ -318,20 +367,21 @@
   </div></div>
 
   <div class="phase"><span class="pn">P5</span><div>
-    <h3>All three sites, then sharpen</h3>
-    <p>Anfield and Wallasey switch on with posters, sign-ins and a short hands-on session per
-    crew. Then we stay close, watching how it's used and refining.</p>
-    <p class="get"><b>You get</b> The whole of ZEZU on one screen — and a partner who keeps making it better.</p>
+    <h3>All three sites — and the franchise playbook</h3>
+    <p>Anfield and Wallasey switch on with posters, codes and a short hands-on session per
+    crew. The same switch-on becomes your standing playbook for every franchise location
+    that follows. Then we stay close, watching how it's used and refining.</p>
+    <p class="get"><b>You get</b> The whole of ZEZU on one screen — and every future location a switch-on away.</p>
   </div></div>
 
   <div class="footbrand">Zezu Operations — Proposal</div>
-  <div class="pagenum">07</div>
+  <div class="pagenum">08</div>
 </div>
 
 <!-- ─────────── WHAT WE NEED / CLOSE ─────────── -->
 <div class="page dark cover">
   <div>
-    <p class="kicker">— 06 · From your side</p>
+    <p class="kicker">— 07 · From your side</p>
     <h2 style="color:var(--paper);">All we need to start</h2>
     <ul class="clean" style="color:#c9c2b6; max-width:140mm;">
       <li>The staff list and pay rates for each site — even rough, we'll tidy together.</li>
