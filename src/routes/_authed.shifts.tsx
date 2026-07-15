@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getShiftBoard, verifyShift, rejectShift, openShop, closeShop } from "@/server/shifts";
+import { PrintReport, DownloadPdfButton } from "@/components/print-report";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authed/shifts")({
@@ -41,6 +42,10 @@ function formatDateTime(iso: string) {
   });
 }
 
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
 function ShiftsPage() {
   const { board } = Route.useLoaderData();
   const [locationFilter, setLocationFilter] = useState<string>("all");
@@ -52,9 +57,18 @@ function ShiftsPage() {
           (r) => r.locationName === board.locations.find((l) => l.id === locationFilter)?.name,
         );
 
+  const locationLabel =
+    locationFilter === "all"
+      ? "All locations"
+      : (board.locations.find((l) => l.id === locationFilter)?.name ?? "Unknown location");
+
   return (
     <div>
-      <PageHeader kicker="Scan in, verified by the manager" title="Shifts" />
+      <PageHeader
+        kicker="Scan in, verified by the manager"
+        title="Shifts"
+        actions={<DownloadPdfButton />}
+      />
 
       {/* Shop-day status */}
       {board.shopToday.length === 0 ? (
@@ -157,6 +171,39 @@ function ShiftsPage() {
           </Card>
         )}
       </div>
+
+      <PrintReport title="Shift history" subtitle={`${locationLabel} — last 14 days`}>
+        <table>
+          <thead>
+            <tr>
+              <th className="border-b-2 px-2 py-2 text-left">Crew</th>
+              <th className="border-b-2 px-2 py-2 text-left">Location</th>
+              <th className="border-b-2 px-2 py-2 text-left">Date</th>
+              <th className="border-b-2 px-2 py-2 text-left">In</th>
+              <th className="border-b-2 px-2 py-2 text-left">Out</th>
+              <th className="border-b-2 px-2 py-2 text-left">Hours</th>
+              <th className="border-b-2 px-2 py-2 text-left">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredRecent.map((r) => (
+              <tr key={r.id}>
+                <td className="border-b px-2 py-1.5 font-bold">{r.memberName}</td>
+                <td className="border-b px-2 py-1.5">{r.locationName}</td>
+                <td className="border-b px-2 py-1.5">{formatDate(r.clockInAt)}</td>
+                <td className="border-b px-2 py-1.5">{formatTime(r.clockInAt)}</td>
+                <td className="border-b px-2 py-1.5">
+                  {r.clockOutAt ? formatTime(r.clockOutAt) : "—"}
+                </td>
+                <td className="border-b px-2 py-1.5">
+                  {r.hours != null ? r.hours.toFixed(2) : "—"}
+                </td>
+                <td className="border-b px-2 py-1.5 capitalize">{r.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </PrintReport>
     </div>
   );
 }
@@ -186,8 +233,12 @@ function ShopDayCard({ shop }: { shop: ShopTodayEntry }) {
   async function handleClose() {
     setBusy(true);
     try {
-      await closeFn({ data: { locationId: shop.locationId } });
-      toast.success(`${shop.locationName} is closed`);
+      const result = await closeFn({ data: { locationId: shop.locationId } });
+      toast.success(
+        result.clockedOutCount > 0
+          ? `${shop.locationName} is closed — ${result.clockedOutCount} clocked out`
+          : `${shop.locationName} is closed`,
+      );
       setConfirmOpen(false);
       router.invalidate();
     } catch (err) {
@@ -232,7 +283,7 @@ function ShopDayCard({ shop }: { shop: ShopTodayEntry }) {
             </DialogTrigger>
             <DialogContent
               title="Close the shop?"
-              description={`This ends ${shop.locationName}'s day. Anyone still on the clock stays open until they tap out.`}
+              description={`This ends ${shop.locationName}'s day. Closing clocks everyone out — anyone still on the clock is clocked out automatically.`}
             >
               <div className="flex justify-end gap-3">
                 <DialogClose asChild>

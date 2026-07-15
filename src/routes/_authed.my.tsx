@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Clock as ClockIcon } from "lucide-react";
+import { Clock as ClockIcon, Crown } from "lucide-react";
 import { PageHeader } from "@/components/app-shell";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { listMyShifts } from "@/server/shifts";
 import { formatGBP } from "@/server/types";
+import { PrintReport, DownloadPdfButton } from "@/components/print-report";
 
 export const Route = createFileRoute("/_authed/my")({
   loader: async () => ({ data: await listMyShifts() }),
@@ -44,6 +45,7 @@ function elapsedLabel(clockInAt: string, now: number) {
 
 function MyShiftsPage() {
   const { data } = Route.useLoaderData();
+  const { actor } = Route.useRouteContext();
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -52,9 +54,28 @@ function MyShiftsPage() {
     return () => clearInterval(timer);
   }, [data.openShift]);
 
+  // The CEO doesn't clock in — there's no nav link here, but a direct URL
+  // would otherwise land on a page full of empty tables. Say so instead.
+  if (actor.role === "ceo") {
+    return (
+      <div>
+        <PageHeader kicker="Only verified hours count for pay" title="My Shifts" />
+        <EmptyState
+          icon={Crown}
+          title="Nothing to track"
+          hint="The CEO doesn't clock in — no hours, no pay, no timesheet here."
+        />
+      </div>
+    );
+  }
+
   return (
     <div>
-      <PageHeader kicker="Only verified hours count for pay" title="My Shifts" />
+      <PageHeader
+        kicker="Only verified hours count for pay"
+        title="My Shifts"
+        actions={<DownloadPdfButton />}
+      />
 
       {data.openShift ? (
         <Card raised className="mb-8">
@@ -149,6 +170,60 @@ function MyShiftsPage() {
       <p className="mt-6 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
         Only verified hours count for pay.
       </p>
+
+      <PrintReport title="My timesheet" subtitle={`${actor.name} — last 6 months`}>
+        <h2 className="mb-2 font-display text-xl uppercase">Monthly totals</h2>
+        <table className="mb-8">
+          <thead>
+            <tr>
+              <th className="border-b-2 px-2 py-2 text-left">Month</th>
+              <th className="border-b-2 px-2 py-2 text-left">Verified</th>
+              <th className="border-b-2 px-2 py-2 text-left">Pending</th>
+              <th className="border-b-2 px-2 py-2 text-left">Est. pay</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.monthly.map((m) => (
+              <tr key={m.month}>
+                <td className="border-b px-2 py-1.5 font-bold">{monthLabel(m.month)}</td>
+                <td className="border-b px-2 py-1.5">{m.verifiedHours.toFixed(2)}h</td>
+                <td className="border-b px-2 py-1.5">{m.pendingHours.toFixed(2)}h</td>
+                <td className="border-b px-2 py-1.5">
+                  {m.estimatedPay != null ? formatGBP(m.estimatedPay) : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <h2 className="mb-2 font-display text-xl uppercase">Shift list</h2>
+        <table>
+          <thead>
+            <tr>
+              <th className="border-b-2 px-2 py-2 text-left">Location</th>
+              <th className="border-b-2 px-2 py-2 text-left">In</th>
+              <th className="border-b-2 px-2 py-2 text-left">Out</th>
+              <th className="border-b-2 px-2 py-2 text-left">Hours</th>
+              <th className="border-b-2 px-2 py-2 text-left">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.shifts.map((s) => (
+              <tr key={s.id}>
+                <td className="border-b px-2 py-1.5 font-bold">{s.locationName}</td>
+                <td className="border-b px-2 py-1.5">{formatDateTime(s.clockInAt)}</td>
+                <td className="border-b px-2 py-1.5">
+                  {s.clockOutAt ? formatDateTime(s.clockOutAt) : "still on shift"}
+                </td>
+                <td className="border-b px-2 py-1.5">
+                  {s.hours != null ? s.hours.toFixed(2) : "—"}
+                </td>
+                <td className="border-b px-2 py-1.5 capitalize">{s.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </PrintReport>
     </div>
   );
 }

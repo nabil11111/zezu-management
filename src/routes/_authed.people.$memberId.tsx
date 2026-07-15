@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { PrintReport, DownloadPdfButton } from "@/components/print-report";
 import {
   getMember,
   updateMember,
@@ -26,6 +27,7 @@ import {
   addOnboardingStep,
   deleteOnboardingStep,
   listLocationOptions,
+  recordPayment,
 } from "@/server/people";
 import { getCurrentActor } from "@/lib/auth";
 import { MEMBER_ROLES, formatGBP, type MemberRole, type ShiftStatus } from "@/server/types";
@@ -129,30 +131,36 @@ function MemberDetail() {
   const { member, locationOptions } = Route.useLoaderData();
   const { actor } = Route.useRouteContext();
   const isCeo = actor.role === "ceo";
+  const isMemberCeo = member.role === "ceo";
 
   return (
     <div className="mx-auto max-w-4xl">
-      <div className="mb-8 flex flex-wrap items-start gap-3">
-        <Button asChild variant="ghost" size="icon-sm" className="mt-2">
-          <Link to="/people">
-            <ArrowLeft />
-          </Link>
-        </Button>
-        <div>
-          <p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
-            — {member.locations.map((l) => l.name).join(" · ") || "No site assigned"}
-          </p>
-          <h1 className="font-display text-4xl uppercase text-foreground md:text-5xl">
-            {member.name}
-          </h1>
-          <div className="mt-2 flex items-center gap-2">
-            <RoleBadge role={member.role} />
-            {!member.active ? <Badge tone="danger">OFF</Badge> : null}
+      <div className="mb-8 flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-wrap items-start gap-3">
+          <Button asChild variant="ghost" size="icon-sm" className="mt-2">
+            <Link to="/people">
+              <ArrowLeft />
+            </Link>
+          </Button>
+          <div>
+            <p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+              — {member.locations.map((l) => l.name).join(" · ") || "No site assigned"}
+            </p>
+            <h1 className="font-display text-4xl uppercase text-foreground md:text-5xl">
+              {member.name}
+            </h1>
+            <div className="mt-2 flex items-center gap-2">
+              <RoleBadge role={member.role} />
+              {!member.active ? <Badge tone="danger">OFF</Badge> : null}
+            </div>
           </div>
         </div>
+        <DownloadPdfButton />
       </div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      {!isMemberCeo ? <PayCard member={member} /> : null}
+
+      <div className={cn("grid grid-cols-1 gap-5 lg:grid-cols-2", !isMemberCeo && "mt-6")}>
         <ProfileCard member={member} isCeo={isCeo} />
         {isCeo ? <LocationsCard member={member} locationOptions={locationOptions} /> : null}
         {isCeo ? <CodeCard member={member} /> : null}
@@ -163,9 +171,13 @@ function MemberDetail() {
         <OnboardingCard member={member} />
       </div>
 
-      <div className="mt-6">
-        <TimesheetCard member={member} />
-      </div>
+      {!isMemberCeo ? (
+        <div className="mt-6">
+          <TimesheetCard member={member} />
+        </div>
+      ) : null}
+
+      <MemberPrintReport member={member} />
     </div>
   );
 }
@@ -507,6 +519,202 @@ function ActiveCard({ member }: { member: MemberDetail }) {
   );
 }
 
+/**
+ * Prominent pay ledger, shown once onboarding is complete. Outstanding
+ * hours + payable amount up top, "Record payment" opens a dialog prefilled
+ * from the current balance, then the recent payment history below.
+ */
+function PayCard({ member }: { member: MemberDetail }) {
+  if (!member.onboardingComplete) {
+    return (
+      <Card className="mt-6">
+        <CardBody>
+          <p className="text-sm text-muted-foreground">
+            Pay tracking unlocks when onboarding is complete.
+          </p>
+        </CardBody>
+      </Card>
+    );
+  }
+
+  const rate = member.hourlyRate !== null ? Number(member.hourlyRate) : null;
+
+  return (
+    <Card raised className="mt-6 border-gold">
+      <CardHeader>
+        <CardTitle>Pay</CardTitle>
+        <RecordPaymentDialog member={member} />
+      </CardHeader>
+      <CardBody className="flex flex-col gap-6">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <div>
+            <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              Outstanding hours
+            </p>
+            <p className="mt-1 font-display text-5xl text-foreground">{member.outstandingHours}h</p>
+          </div>
+          <div className="sm:text-right">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              Payable
+            </p>
+            <p className="mt-1 font-display text-5xl text-gold">
+              {member.payableAmount !== null ? formatGBP(member.payableAmount) : "—"}
+            </p>
+          </div>
+        </div>
+        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          {rate !== null
+            ? `Rate ${formatGBP(rate)}/hr`
+            : "No hourly rate set — add one on the profile to calculate payable amount."}
+        </p>
+
+        <PaymentHistory payments={member.payments} />
+      </CardBody>
+    </Card>
+  );
+}
+
+function RecordPaymentDialog({ member }: { member: MemberDetail }) {
+  const router = useRouter();
+  const recordFn = useServerFn(recordPayment);
+  const rate = member.hourlyRate !== null ? Number(member.hourlyRate) : null;
+  const [open, setOpen] = useState(false);
+  const [hours, setHours] = useState(String(member.outstandingHours));
+  const [amount, setAmount] = useState(
+    rate !== null ? String(Math.round(member.outstandingHours * rate * 100) / 100) : "",
+  );
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  function reset() {
+    setHours(String(member.outstandingHours));
+    setAmount(rate !== null ? String(Math.round(member.outstandingHours * rate * 100) / 100) : "");
+    setNote("");
+  }
+
+  function onHoursChange(value: string) {
+    setHours(value);
+    const h = Number(value);
+    if (rate !== null && Number.isFinite(h)) {
+      setAmount(String(Math.round(h * rate * 100) / 100));
+    }
+  }
+
+  async function submit() {
+    const hoursNum = Number(hours);
+    const amountNum = Number(amount);
+    if (!(hoursNum > 0)) {
+      toast.error("Enter the hours this payment covers");
+      return;
+    }
+    if (!(amountNum > 0)) {
+      toast.error("Enter the amount paid");
+      return;
+    }
+    setSaving(true);
+    try {
+      await recordFn({
+        data: {
+          memberId: member.id,
+          amount: amountNum,
+          hours: hoursNum,
+          note: note.trim() || undefined,
+        },
+      });
+      setOpen(false);
+      reset();
+      toast.success(`Paid ${member.name} — balance updated`);
+      router.invalidate();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't record payment");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        reset();
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button disabled={member.outstandingHours <= 0}>Record payment</Button>
+      </DialogTrigger>
+      <DialogContent title="Record payment">
+        <div className="flex flex-col gap-5">
+          <p className="text-sm text-muted-foreground">
+            {member.outstandingHours}h outstanding
+            {rate !== null ? ` at ${formatGBP(rate)}/hr` : ""} — hours paid can&rsquo;t exceed this.
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Hours covered">
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={hours}
+                onChange={(e) => onHoursChange(e.target.value)}
+              />
+            </Field>
+            <Field label="Amount (£)">
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+            </Field>
+          </div>
+          <Field label="Note (optional)">
+            <Textarea value={note} onChange={(e) => setNote(e.target.value)} />
+          </Field>
+          <Button onClick={submit} disabled={saving}>
+            {saving ? "Recording…" : "Record payment"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PaymentHistory({ payments }: { payments: MemberDetail["payments"] }) {
+  return (
+    <div className="border-t-2 border-foreground/10 pt-5">
+      <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+        Payment history
+      </p>
+      {payments.length === 0 ? (
+        <p className="py-4 text-sm text-muted-foreground">No payments recorded yet.</p>
+      ) : (
+        <div className="flex flex-col">
+          {payments.map((p) => (
+            <div
+              key={p.id}
+              className="flex items-center justify-between gap-3 border-b border-foreground/10 py-3 last:border-b-0"
+            >
+              <div className="min-w-0">
+                <p className="text-sm text-foreground">{formatDateTime(p.createdAt)}</p>
+                <p className="truncate font-mono text-[10px] uppercase text-muted-foreground">
+                  By {p.paidByName}
+                  {p.note ? ` · ${p.note}` : ""}
+                </p>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="font-mono text-sm font-bold text-pop">{formatGBP(p.amount)}</p>
+                <p className="font-mono text-[10px] text-muted-foreground">{p.hours}h</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OnboardingCard({ member }: { member: MemberDetail }) {
   const router = useRouter();
   const toggleFn = useServerFn(toggleOnboardingStep);
@@ -694,5 +902,132 @@ function TimesheetCard({ member }: { member: MemberDetail }) {
         </div>
       </CardBody>
     </Card>
+  );
+}
+
+/**
+ * PDF export: profile summary always; pay balance + payments + recent
+ * shifts only for non-CEO members (CEOs have no pay/timesheet to print).
+ */
+function MemberPrintReport({ member }: { member: MemberDetail }) {
+  const isMemberCeo = member.role === "ceo";
+
+  return (
+    <PrintReport
+      title={`${member.name} — pay record`}
+      subtitle={member.locations.map((l) => l.name).join(" · ") || undefined}
+    >
+      <div className="mb-6 grid grid-cols-2 gap-4 text-sm text-[#1b1510] sm:grid-cols-4">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">Role</p>
+          <p className="mt-1">{ROLE_LABEL[member.role]}</p>
+        </div>
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">Phone</p>
+          <p className="mt-1">{member.phone ?? "Not set"}</p>
+        </div>
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">Started</p>
+          <p className="mt-1">{member.startedAt ? formatDate(member.startedAt) : "Not set"}</p>
+        </div>
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">
+            Hourly rate
+          </p>
+          <p className="mt-1">{member.hourlyRate ? formatGBP(member.hourlyRate) : "Not set"}</p>
+        </div>
+      </div>
+
+      {isMemberCeo ? null : (
+        <>
+          <div className="mb-6 grid grid-cols-2 gap-4">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">
+                Outstanding hours
+              </p>
+              <p className="mt-1 text-2xl font-bold text-[#1b1510]">{member.outstandingHours}h</p>
+            </div>
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">
+                Payable
+              </p>
+              <p className="mt-1 text-2xl font-bold text-[#1b1510]">
+                {member.payableAmount !== null ? formatGBP(member.payableAmount) : "—"}
+              </p>
+            </div>
+          </div>
+
+          <h2 className="mb-2 font-mono text-xs font-bold uppercase tracking-widest text-[#1b1510]">
+            Payments
+          </h2>
+          <table className="mb-6 w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b-2 border-[#1b1510]/20 font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">
+                <th className="py-2 pr-4">Date</th>
+                <th className="py-2 pr-4">Amount</th>
+                <th className="py-2 pr-4">Hours</th>
+                <th className="py-2 pr-4">By</th>
+                <th className="py-2">Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {member.payments.length === 0 ? (
+                <tr>
+                  <td className="py-3 text-[#6e6455]" colSpan={5}>
+                    No payments recorded yet.
+                  </td>
+                </tr>
+              ) : (
+                member.payments.map((p) => (
+                  <tr key={p.id} className="border-b border-[#1b1510]/10">
+                    <td className="py-2 pr-4">{formatDateTime(p.createdAt)}</td>
+                    <td className="py-2 pr-4">{formatGBP(p.amount)}</td>
+                    <td className="py-2 pr-4">{p.hours}h</td>
+                    <td className="py-2 pr-4">{p.paidByName}</td>
+                    <td className="py-2">{p.note ?? "—"}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+
+          <h2 className="mb-2 font-mono text-xs font-bold uppercase tracking-widest text-[#1b1510]">
+            Recent shifts
+          </h2>
+          <table className="w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b-2 border-[#1b1510]/20 font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">
+                <th className="py-2 pr-4">Site</th>
+                <th className="py-2 pr-4">Clock in</th>
+                <th className="py-2 pr-4">Clock out</th>
+                <th className="py-2 pr-4">Hours</th>
+                <th className="py-2">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {member.recentShifts.length === 0 ? (
+                <tr>
+                  <td className="py-3 text-[#6e6455]" colSpan={5}>
+                    No shifts logged yet.
+                  </td>
+                </tr>
+              ) : (
+                member.recentShifts.map((s) => (
+                  <tr key={s.id} className="border-b border-[#1b1510]/10">
+                    <td className="py-2 pr-4">{s.locationName}</td>
+                    <td className="py-2 pr-4">{formatDateTime(s.clockInAt)}</td>
+                    <td className="py-2 pr-4">
+                      {s.clockOutAt ? formatTime(s.clockOutAt) : "still in"}
+                    </td>
+                    <td className="py-2 pr-4">{s.hours !== null ? `${s.hours}h` : "—"}</td>
+                    <td className="py-2">{s.status}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </>
+      )}
+    </PrintReport>
   );
 }

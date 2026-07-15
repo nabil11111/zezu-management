@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Minus, Plus, PackageCheck, Sparkles, Truck } from "lucide-react";
+import { Check, Minus, Plus, PackageCheck, Sparkles, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app-shell";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,7 +18,13 @@ import {
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/ui/empty-state";
 import { listLocations } from "@/server/locations";
-import { getOrderBoard, placeOrder, cancelOrder, confirmReceipt } from "@/server/orders";
+import {
+  getOrderBoard,
+  placeOrder,
+  cancelOrder,
+  confirmReceipt,
+  setItemUnloaded,
+} from "@/server/orders";
 import { ORDER_STATUS_LABEL, type OrderStatus } from "@/server/types";
 import { cn } from "@/lib/utils";
 
@@ -439,16 +445,23 @@ function OrderDetailDialog({
   const router = useRouter();
   const cancelOrderFn = useServerFn(cancelOrder);
   const confirmReceiptFn = useServerFn(confirmReceipt);
+  const setUnloadedFn = useServerFn(setItemUnloaded);
   const [busy, setBusy] = useState(false);
-  const [received, setReceived] = useState<Record<string, string>>({});
+  const [unloaded, setUnloaded] = useState<Record<string, boolean>>({});
+  const [receivedQty, setReceivedQty] = useState<Record<string, string>>({});
 
+  // Reset the checklist's local state whenever a different (or freshly
+  // reloaded) order is opened — restoring whatever's already been ticked.
   useEffect(() => {
     if (order && order.status === "sent") {
-      const initial: Record<string, string> = {};
+      const initialUnloaded: Record<string, boolean> = {};
+      const initialQty: Record<string, string> = {};
       for (const item of order.items) {
-        initial[item.orderItemId] = String(item.quantitySent ?? 0);
+        initialUnloaded[item.orderItemId] = item.unloaded;
+        initialQty[item.orderItemId] = String(item.quantitySent ?? 0);
       }
-      setReceived(initial);
+      setUnloaded(initialUnloaded);
+      setReceivedQty(initialQty);
     }
   }, [order]);
 
@@ -468,8 +481,27 @@ function OrderDetailDialog({
     }
   }
 
+  async function toggleUnloaded(orderItemId: string) {
+    const next = !unloaded[orderItemId];
+    setUnloaded((s) => ({ ...s, [orderItemId]: next }));
+    try {
+      await setUnloadedFn({ data: { orderItemId, unloaded: next } });
+    } catch (e) {
+      setUnloaded((s) => ({ ...s, [orderItemId]: !next }));
+      toast.error(e instanceof Error ? e.message : "Couldn't save the tick");
+    }
+  }
+
   async function doConfirm() {
     if (!order) return;
+    const sentItems = order.items.filter((i) => (i.quantitySent ?? 0) > 0);
+    const allTicked = sentItems.every((i) => unloaded[i.orderItemId]);
+    if (!allTicked) {
+      const ok = window.confirm(
+        "Some items aren't ticked off yet — they'll be recorded as not received (0). Continue?",
+      );
+      if (!ok) return;
+    }
     setBusy(true);
     try {
       await confirmReceiptFn({
@@ -477,7 +509,10 @@ function OrderDetailDialog({
           orderId: order.id,
           items: order.items.map((item) => ({
             orderItemId: item.orderItemId,
-            quantityReceived: Number(received[item.orderItemId] ?? 0),
+            unloaded: !!unloaded[item.orderItemId],
+            quantityReceived: unloaded[item.orderItemId]
+              ? Number(receivedQty[item.orderItemId] ?? 0) || 0
+              : 0,
           })),
         },
       });
@@ -515,56 +550,155 @@ function OrderDetailDialog({
             </p>
           ) : null}
 
-          <div className="overflow-x-auto border-2 border-foreground/15">
-            <table className="w-full min-w-[420px] text-sm">
-              <thead>
-                <tr className="border-b-2 border-foreground/15 text-left font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                  <th className="px-3 py-2">Item</th>
-                  <th className="px-2 py-2 text-right">Ordered</th>
-                  <th className="px-2 py-2 text-right">Sent</th>
-                  <th className="px-2 py-2 text-right">Received</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(order?.items ?? []).map((item) => (
-                  <tr
+          {order?.status === "sent" ? (
+            <div className="flex flex-col gap-2">
+              {order.items.map((item) => {
+                const sent = item.quantitySent ?? 0;
+                if (sent <= 0) {
+                  return (
+                    <div
+                      key={item.orderItemId}
+                      className="flex items-center justify-between gap-3 border-2 border-destructive/40 px-3 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-bold text-muted-foreground line-through">
+                          {item.name}
+                        </p>
+                        <p className="font-mono text-[10px] text-muted-foreground">
+                          Ordered {formatQty(item.quantityOrdered)} {item.unit}
+                        </p>
+                      </div>
+                      <Badge tone="danger" className="shrink-0">
+                        Not available
+                      </Badge>
+                    </div>
+                  );
+                }
+
+                const isChecked = !!unloaded[item.orderItemId];
+                return (
+                  <div
                     key={item.orderItemId}
-                    className="border-b border-foreground/10 last:border-b-0"
+                    className={cn(
+                      "flex items-center gap-3 border-2 px-3 py-3 transition-all",
+                      isChecked ? "border-pop bg-pop/10" : "border-foreground/15",
+                    )}
                   >
-                    <td className="px-3 py-2.5 font-bold text-foreground">{item.name}</td>
-                    <td className="px-2 py-2.5 text-right font-mono text-xs">
-                      {formatQty(item.quantityOrdered)} {item.unit}
-                    </td>
-                    <td className="px-2 py-2.5 text-right font-mono text-xs">
-                      {item.quantitySent != null
-                        ? `${formatQty(item.quantitySent)} ${item.unit}`
-                        : "—"}
-                    </td>
-                    <td className="px-2 py-2.5 text-right">
-                      {order?.status === "sent" ? (
-                        <Input
-                          type="number"
-                          min="0"
-                          inputMode="decimal"
-                          className="ml-auto h-8 w-20 text-right"
-                          value={received[item.orderItemId] ?? ""}
-                          onChange={(e) =>
-                            setReceived((r) => ({ ...r, [item.orderItemId]: e.target.value }))
-                          }
-                        />
-                      ) : (
-                        <span className="font-mono text-xs">
+                    <button
+                      type="button"
+                      onClick={() => toggleUnloaded(item.orderItemId)}
+                      className="flex flex-1 cursor-pointer items-center gap-3 text-left"
+                    >
+                      <span
+                        className={cn(
+                          "flex size-8 shrink-0 items-center justify-center border-2",
+                          isChecked ? "border-pop bg-pop text-ink" : "border-foreground/40",
+                        )}
+                      >
+                        {isChecked ? <Check className="size-5" strokeWidth={3} /> : null}
+                      </span>
+                      <span className="min-w-0">
+                        <span
+                          className={cn(
+                            "block truncate font-bold",
+                            isChecked ? "text-foreground" : "text-muted-foreground line-through",
+                          )}
+                        >
+                          {item.name}
+                        </span>
+                        <span className="block font-mono text-[10px] text-muted-foreground">
+                          Sent {formatQty(sent)} {item.unit}
+                        </span>
+                      </span>
+                    </button>
+
+                    {isChecked ? (
+                      <Input
+                        type="number"
+                        min="0"
+                        inputMode="decimal"
+                        className="w-24 shrink-0 text-right"
+                        value={receivedQty[item.orderItemId] ?? ""}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) =>
+                          setReceivedQty((r) => ({ ...r, [item.orderItemId]: e.target.value }))
+                        }
+                      />
+                    ) : (
+                      <Badge tone="neutral" className="shrink-0">
+                        Not counted
+                      </Badge>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="overflow-x-auto border-2 border-foreground/15">
+              <table className="w-full min-w-[420px] text-sm">
+                <thead>
+                  <tr className="border-b-2 border-foreground/15 text-left font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                    <th className="px-3 py-2">Item</th>
+                    <th className="px-2 py-2 text-right">Ordered</th>
+                    <th className="px-2 py-2 text-right">Sent</th>
+                    <th className="px-2 py-2 text-right">Received</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(order?.items ?? []).map((item) => {
+                    const unavailable = item.quantitySent === 0;
+                    // 'sent' orders render the checklist above, so this table
+                    // only ever shows placed/received/cancelled — a shortfall
+                    // on the sent quantity only makes sense once received.
+                    const sentShort =
+                      order?.status === "received" &&
+                      (item.quantitySent ?? item.quantityOrdered) < item.quantityOrdered;
+                    const receivedShort =
+                      order?.status === "received" &&
+                      (item.quantityReceived ?? 0) < (item.quantitySent ?? item.quantityOrdered);
+                    return (
+                      <tr
+                        key={item.orderItemId}
+                        className="border-b border-foreground/10 last:border-b-0"
+                      >
+                        <td
+                          className={cn(
+                            "px-3 py-2.5 font-bold",
+                            unavailable ? "text-destructive" : "text-foreground",
+                          )}
+                        >
+                          {item.name}
+                        </td>
+                        <td className="px-2 py-2.5 text-right font-mono text-xs">
+                          {formatQty(item.quantityOrdered)} {item.unit}
+                        </td>
+                        <td
+                          className={cn(
+                            "px-2 py-2.5 text-right font-mono text-xs",
+                            sentShort && "font-bold text-destructive",
+                          )}
+                        >
+                          {item.quantitySent != null
+                            ? `${formatQty(item.quantitySent)} ${item.unit}`
+                            : "—"}
+                        </td>
+                        <td
+                          className={cn(
+                            "px-2 py-2.5 text-right font-mono text-xs",
+                            receivedShort && "font-bold text-destructive",
+                          )}
+                        >
                           {item.quantityReceived != null
                             ? `${formatQty(item.quantityReceived)} ${item.unit}`
                             : "—"}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {order?.sentNote ? (
             <p className="font-mono text-[11px] text-muted-foreground">

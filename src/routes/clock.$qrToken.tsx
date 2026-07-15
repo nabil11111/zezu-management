@@ -160,6 +160,23 @@ function OutcomeView({
           </p>
         </button>
       );
+    case "opened":
+      return (
+        <button onClick={onDone} className="flex w-full flex-col items-center gap-3 text-center">
+          <p className="font-display text-4xl uppercase leading-[0.95] text-pop md:text-5xl">
+            Shop&apos;s open.
+          </p>
+        </button>
+      );
+    case "ceo_ack":
+      return (
+        <button onClick={onDone} className="flex w-full flex-col items-center gap-3 text-center">
+          <p className="font-display text-3xl uppercase leading-tight text-foreground md:text-4xl">
+            The shop&apos;s open and running, {outcome.name}
+          </p>
+          <p className="text-sm text-muted-foreground">You don&apos;t clock in.</p>
+        </button>
+      );
     default:
       return null;
   }

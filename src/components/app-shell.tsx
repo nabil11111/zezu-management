@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
+  BarChart3,
+  CalendarDays,
   LayoutDashboard,
   PoundSterling,
   Package,
@@ -31,12 +33,14 @@ import { cn } from "@/lib/utils";
  */
 const NAV = [
   { to: "/", label: "Live", icon: LayoutDashboard, exact: true, roles: ["ceo", "manager"] },
+  { to: "/insights", label: "Insights", icon: BarChart3, roles: ["ceo"] },
   { to: "/sales", label: "Sales", icon: PoundSterling, roles: ["ceo", "manager"] },
   { to: "/stock", label: "Stock", icon: Package, roles: ["ceo", "manager"] },
   { to: "/orders", label: "Orders", icon: PackageCheck, roles: ["ceo", "manager", "staff"] },
   { to: "/warehouse", label: "Warehouse", icon: Truck, roles: ["ceo", "warehouse"] },
   { to: "/menu", label: "Menu", icon: UtensilsCrossed, roles: ["ceo", "manager", "staff"] },
   { to: "/people", label: "People", icon: UserRound, roles: ["ceo", "manager"] },
+  { to: "/rota", label: "Rota", icon: CalendarDays, roles: ["ceo", "manager", "staff"] },
   { to: "/shifts", label: "Shifts", icon: Clock, roles: ["ceo", "manager"] },
   { to: "/my", label: "My Shifts", icon: Clock, roles: ["staff", "warehouse"] },
   { to: "/settings", label: "Settings", icon: Settings, roles: ["ceo"] },

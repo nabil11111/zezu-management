@@ -20,6 +20,7 @@ const createInput = z.object({
   description: z.string().trim().min(1).optional().nullable(),
   videoUrl: z.string().trim().min(1).optional().nullable(),
   coverUrl: z.string().trim().min(1).optional().nullable(),
+  prepSteps: z.array(z.string().trim().min(1)).max(30).optional(),
   isBestseller: z.boolean().optional(),
   published: z.boolean().optional(),
 });
@@ -31,6 +32,7 @@ const patchInput = z.object({
   description: z.string().trim().min(1).optional().nullable(),
   videoUrl: z.string().trim().min(1).optional().nullable(),
   coverUrl: z.string().trim().min(1).optional().nullable(),
+  prepSteps: z.array(z.string().trim().min(1)).max(30).optional(),
   isBestseller: z.boolean().optional(),
   published: z.boolean().optional(),
   sortOrder: z.number().int().min(0).optional(),
@@ -57,6 +59,7 @@ export const listMenu = createServerFn({ method: "GET" }).handler(async () => {
     description: r.description,
     videoUrl: r.videoUrl,
     coverUrl: r.coverUrl,
+    prepSteps: (r.prepSteps as string[] | null) ?? null,
     isBestseller: r.isBestseller,
     published: r.published,
     sortOrder: r.sortOrder,
@@ -93,6 +96,7 @@ export const createMenuItem = createServerFn({ method: "POST" })
         description: data.description ?? null,
         videoUrl: data.videoUrl ?? null,
         coverUrl: data.coverUrl ?? null,
+        prepSteps: data.prepSteps && data.prepSteps.length > 0 ? data.prepSteps : null,
         isBestseller: data.isBestseller ?? false,
         published: data.published ?? true,
         sortOrder,
@@ -100,7 +104,7 @@ export const createMenuItem = createServerFn({ method: "POST" })
       .returning();
 
     await logActivity("menu_item", item.id, "created", { name: item.name });
-    return item;
+    return { ...item, prepSteps: (item.prepSteps as string[] | null) ?? null };
   });
 
 /** CEO only: edit any field on a dish. */
@@ -113,20 +117,21 @@ export const updateMenuItem = createServerFn({ method: "POST" })
     const { db, menuItems } = await import("@/db");
     const { eq } = await import("drizzle-orm");
 
-    const { price, ...rest } = data.patch;
+    const { price, prepSteps, ...rest } = data.patch;
 
     const [item] = await db
       .update(menuItems)
       .set({
         ...rest,
         ...(price !== undefined ? { price: price != null ? String(price) : null } : {}),
+        ...(prepSteps !== undefined ? { prepSteps: prepSteps.length > 0 ? prepSteps : null } : {}),
         updatedAt: new Date(),
       })
       .where(eq(menuItems.id, data.id))
       .returning();
 
     await logActivity("menu_item", data.id, "updated", { name: item?.name });
-    return item;
+    return { ...item, prepSteps: (item.prepSteps as string[] | null) ?? null };
   });
 
 /** CEO only: remove a dish from the brand library. */
@@ -172,5 +177,5 @@ export const reorderMenuItem = createServerFn({ method: "POST" })
       .returning();
 
     await logActivity("menu_item", data.id, "reordered", { sortOrder: data.sortOrder });
-    return item;
+    return { ...item, prepSteps: (item.prepSteps as string[] | null) ?? null };
   });

@@ -17,9 +17,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PrintReport, DownloadPdfButton } from "@/components/print-report";
 import { listMembers, createMember, listLocationOptions } from "@/server/people";
 import { getCurrentActor } from "@/lib/auth";
-import { MEMBER_ROLES, type MemberRole } from "@/server/types";
+import { MEMBER_ROLES, formatGBP, type MemberRole } from "@/server/types";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authed/people/")({
@@ -100,10 +101,17 @@ function PeoplePage() {
   });
 
   const addButton = isCeo ? <AddMemberDialog locationOptions={locationOptions} /> : undefined;
+  const actions = (
+    <>
+      <DownloadPdfButton />
+      {addButton}
+    </>
+  );
 
   return (
     <div>
-      <PageHeader kicker="ZEZU Operations" title="People" actions={addButton} />
+      <PageHeader kicker="ZEZU Operations" title="People" actions={actions} />
+      <PayrollReport members={members} />
 
       {members.length > 0 ? (
         <div className="mb-8 flex flex-wrap items-center gap-4">
@@ -159,10 +167,12 @@ function PeoplePage() {
 }
 
 function MemberCard({ member }: { member: PeopleMember }) {
+  const isCeo = member.role === "ceo";
   const pct =
     member.onboarding.total > 0
       ? Math.round((member.onboarding.done / member.onboarding.total) * 100)
       : 0;
+  const payableAmount = member.payableAmount;
 
   return (
     <Link to="/people/$memberId" params={{ memberId: member.id }} className="group">
@@ -188,7 +198,12 @@ function MemberCard({ member }: { member: PeopleMember }) {
             </div>
           </div>
 
-          <div className="mt-auto grid grid-cols-2 gap-4 border-t-2 border-foreground/10 pt-4">
+          <div
+            className={cn(
+              "mt-auto grid gap-4 border-t-2 border-foreground/10 pt-4",
+              isCeo ? "grid-cols-1" : "grid-cols-2",
+            )}
+          >
             <div>
               <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
                 Onboarding
@@ -202,18 +217,61 @@ function MemberCard({ member }: { member: PeopleMember }) {
                 </span>
               </div>
             </div>
-            <div className="text-right">
-              <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-                This month
-              </p>
-              <p className="mt-1.5 font-mono text-xs font-bold text-foreground">
-                {member.thisMonthVerifiedHours}h
-              </p>
-            </div>
+            {isCeo ? null : (
+              <div className="text-right">
+                <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                  This month
+                </p>
+                <p className="mt-1.5 font-mono text-xs font-bold text-foreground">
+                  {member.thisMonthVerifiedHours}h
+                </p>
+                {member.hourlyRate !== null && payableAmount !== null ? (
+                  <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                    {member.outstandingHours}h · {formatGBP(payableAmount)} owed
+                  </p>
+                ) : null}
+              </div>
+            )}
           </div>
         </CardBody>
       </Card>
     </Link>
+  );
+}
+
+/** CEO PDF export: outstanding pay across every site, one row per non-CEO member. */
+function PayrollReport({ members }: { members: PeopleMember[] }) {
+  const payable = members.filter((m) => m.role !== "ceo");
+
+  return (
+    <PrintReport title="Payroll" subtitle="Outstanding pay — all sites">
+      <table className="w-full border-collapse text-left text-sm">
+        <thead>
+          <tr className="border-b-2 border-[#1b1510]/20 font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">
+            <th className="py-2 pr-4">Name</th>
+            <th className="py-2 pr-4">Role</th>
+            <th className="py-2 pr-4">Sites</th>
+            <th className="py-2 pr-4">Rate</th>
+            <th className="py-2 pr-4">Outstanding hrs</th>
+            <th className="py-2">Payable</th>
+          </tr>
+        </thead>
+        <tbody>
+          {payable.map((m) => (
+            <tr key={m.id} className="border-b border-[#1b1510]/10">
+              <td className="py-2 pr-4">{m.name}</td>
+              <td className="py-2 pr-4">{ROLE_LABEL[m.role] ?? m.role}</td>
+              <td className="py-2 pr-4">{m.locations.map((l) => l.name).join(", ") || "—"}</td>
+              <td className="py-2 pr-4">{m.hourlyRate ? formatGBP(m.hourlyRate) : "—"}</td>
+              <td className="py-2 pr-4">{m.outstandingHours ?? "—"}h</td>
+              <td className="py-2 font-bold">
+                {m.payableAmount !== null ? formatGBP(m.payableAmount) : "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </PrintReport>
   );
 }
 

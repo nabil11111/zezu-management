@@ -17,6 +17,7 @@ import { PageHeader } from "@/components/app-shell";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { PrintReport, DownloadPdfButton } from "@/components/print-report";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import {
   Select,
@@ -139,6 +140,7 @@ function SalesPage() {
                 </button>
               ))}
             </div>
+            <DownloadPdfButton label="Download PDF" />
           </>
         }
       />
@@ -214,7 +216,93 @@ function SalesPage() {
       <div className="mt-8">
         <RecentEntriesTable entries={dashboard.recentEntries} onEdit={setSelection} />
       </div>
+
+      <SalesReportPrint dashboard={dashboard} sites={sites} search={search} />
     </div>
+  );
+}
+
+// ── PDF export ───────────────────────────────────────────────────────────
+
+function SalesReportPrint({
+  dashboard,
+  sites,
+  search,
+}: {
+  dashboard: Dashboard;
+  sites: SiteOption[];
+  search: { location?: string; days?: WindowDays };
+}) {
+  const scopeLabel =
+    !search.location || search.location === "all"
+      ? "All sites"
+      : (sites.find((s) => s.id === search.location)?.name ?? "All sites");
+  const windowLabel = `Last ${search.days ?? 30} days`;
+
+  return (
+    <PrintReport title="Sales report" subtitle={`${scopeLabel} — ${windowLabel}`}>
+      <table className="mb-6 w-full border-collapse text-left text-sm">
+        <tbody>
+          <tr className="border-b border-[#1b1510]/10">
+            <td className="py-2 pr-4 font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">
+              Today so far
+            </td>
+            <td className="py-2 pr-4 font-bold">
+              {dashboard.today.logged ? formatGBP(dashboard.today.total) : "—"}
+            </td>
+            <td className="py-2 pr-4 font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">
+              This week
+            </td>
+            <td className="py-2 font-bold">{formatGBP(dashboard.weekTotal)}</td>
+          </tr>
+          <tr>
+            <td className="py-2 pr-4 font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">
+              Best day on record
+            </td>
+            <td className="py-2 pr-4 font-bold">
+              {dashboard.bestDay
+                ? `${formatShortDate(dashboard.bestDay.date)} — ${formatGBP(dashboard.bestDay.total)}`
+                : "—"}
+            </td>
+            <td className="py-2 pr-4 font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">
+              Worst day on record
+            </td>
+            <td className="py-2 font-bold">
+              {dashboard.worstDay
+                ? `${formatShortDate(dashboard.worstDay.date)} — ${formatGBP(dashboard.worstDay.total)}`
+                : "—"}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <table className="w-full border-collapse text-left text-sm">
+        <thead>
+          <tr className="border-b-2 border-[#1b1510]/20 font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">
+            <th className="py-2 pr-4">Date</th>
+            <th className="py-2 pr-4">Site</th>
+            <th className="py-2 pr-4 text-right">Uber</th>
+            <th className="py-2 pr-4 text-right">Takeaway</th>
+            <th className="py-2 pr-4 text-right">Dine-in</th>
+            <th className="py-2 pr-4 text-right">Total</th>
+            <th className="py-2">Logged by</th>
+          </tr>
+        </thead>
+        <tbody>
+          {dashboard.recentEntries.map((e) => (
+            <tr key={e.id} className="border-b border-[#1b1510]/10">
+              <td className="py-2 pr-4">{formatShortDate(e.date)}</td>
+              <td className="py-2 pr-4 font-bold">{e.locationName}</td>
+              <td className="py-2 pr-4 text-right">{formatGBP(e.uber)}</td>
+              <td className="py-2 pr-4 text-right">{formatGBP(e.takeaway)}</td>
+              <td className="py-2 pr-4 text-right">{formatGBP(e.dineIn)}</td>
+              <td className="py-2 pr-4 text-right font-bold">{formatGBP(e.total)}</td>
+              <td className="py-2">{e.byMemberName ?? "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </PrintReport>
   );
 }
 

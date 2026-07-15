@@ -245,6 +245,11 @@ export const stockOrderItems = pgTable("stock_order_items", {
   quantitySent: numeric("quantity_sent"),
   // What the branch counted off the van (null until verified).
   quantityReceived: numeric("quantity_received"),
+  // Checklist ticks: the warehouse ticks `loaded` while packing the van
+  // (untucked = unavailable, sent as 0); the branch ticks `unloaded` while
+  // counting the delivery off the van.
+  loaded: boolean("loaded").notNull().default(false),
+  unloaded: boolean("unloaded").notNull().default(false),
   note: text("note"),
 });
 
@@ -263,6 +268,8 @@ export const menuItems = pgTable("menu_items", {
   // Pasted link for v1 (no file storage yet) — the dish video for training.
   videoUrl: text("video_url"),
   coverUrl: text("cover_url"),
+  // Step-by-step prep instructions: a JSON array of strings, one per step.
+  prepSteps: jsonb("prep_steps"),
   isBestseller: boolean("is_bestseller").notNull().default(false),
   published: boolean("published").notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),
@@ -291,6 +298,60 @@ export const salesEntries = pgTable(
 export const salesEntriesRelations = relations(salesEntries, ({ one }) => ({
   location: one(locations, { fields: [salesEntries.locationId], references: [locations.id] }),
   by: one(members, { fields: [salesEntries.byMemberId], references: [members.id] }),
+}));
+
+// ── member_payments (weekly pay: recorded against verified hours) ────────
+// Everyone is paid weekly. When the manager pays someone, they record the
+// amount and how many verified hours it covers; the profile's "payable"
+// balance is verified hours minus hours already paid, times the rate.
+export const memberPayments = pgTable("member_payments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  memberId: uuid("member_id")
+    .notNull()
+    .references(() => members.id),
+  amount: numeric("amount").notNull(),
+  // Verified hours this payment settles (deducted from the balance).
+  hours: numeric("hours").notNull(),
+  note: text("note"),
+  paidBy: uuid("paid_by")
+    .notNull()
+    .references(() => members.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const memberPaymentsRelations = relations(memberPayments, ({ one }) => ({
+  member: one(members, { fields: [memberPayments.memberId], references: [members.id] }),
+  payer: one(members, { fields: [memberPayments.paidBy], references: [members.id] }),
+}));
+
+// ── rota_shifts (the manager's timetable for the week ahead) ─────────────
+export const rotaShifts = pgTable(
+  "rota_shifts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    locationId: uuid("location_id")
+      .notNull()
+      .references(() => locations.id),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => members.id),
+    date: date("date").notNull(),
+    // "HH:MM" 24h strings — planned times, not the clock-in record.
+    startTime: text("start_time").notNull(),
+    endTime: text("end_time").notNull(),
+    note: text("note"),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => members.id),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("rota_member_day_start").on(t.memberId, t.date, t.startTime)],
+);
+
+export const rotaShiftsRelations = relations(rotaShifts, ({ one }) => ({
+  location: one(locations, { fields: [rotaShifts.locationId], references: [locations.id] }),
+  member: one(members, { fields: [rotaShifts.memberId], references: [members.id] }),
+  creator: one(members, { fields: [rotaShifts.createdBy], references: [members.id] }),
 }));
 
 // ── activity_log (who did what, when — shown in Settings) ────────────────

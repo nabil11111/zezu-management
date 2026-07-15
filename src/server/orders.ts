@@ -73,6 +73,8 @@ export const getOrderBoard = createServerFn({ method: "GET" })
             quantityOrdered: stockOrderItems.quantityOrdered,
             quantitySent: stockOrderItems.quantitySent,
             quantityReceived: stockOrderItems.quantityReceived,
+            loaded: stockOrderItems.loaded,
+            unloaded: stockOrderItems.unloaded,
             itemName: stockItems.name,
             itemUnit: stockItems.unit,
           })
@@ -114,6 +116,8 @@ export const getOrderBoard = createServerFn({ method: "GET" })
           quantityOrdered: Number(it.quantityOrdered),
           quantitySent: it.quantitySent != null ? Number(it.quantitySent) : null,
           quantityReceived: it.quantityReceived != null ? Number(it.quantityReceived) : null,
+          loaded: it.loaded,
+          unloaded: it.unloaded,
         })),
     }));
 
@@ -228,6 +232,10 @@ export const cancelOrder = createServerFn({ method: "POST" })
  * ONLY step that touches stock_items.level — it writes a 'delivery' move
  * per item received and bumps the level atomically, all in one transaction
  * alongside the order + item status update.
+ *
+ * `unloaded` mirrors the branch's off-the-van checklist ticks (see
+ * `setItemUnloaded`) and is authoritative here: an item not ticked always
+ * receives 0, regardless of whatever quantity happens to be in the payload.
  */
 export const confirmReceipt = createServerFn({ method: "POST" })
   .validator(
@@ -237,6 +245,7 @@ export const confirmReceipt = createServerFn({ method: "POST" })
         .array(
           z.object({
             orderItemId: z.string().uuid(),
+            unloaded: z.boolean(),
             quantityReceived: z.number().min(0),
           }),
         )
@@ -268,20 +277,23 @@ export const confirmReceipt = createServerFn({ method: "POST" })
 
     await db.transaction(async (tx) => {
       for (const item of data.items) {
+        // Not ticked off the van → received 0, regardless of the payload qty.
+        const quantityReceived = item.unloaded ? item.quantityReceived : 0;
+
         await tx
           .update(stockOrderItems)
-          .set({ quantityReceived: String(item.quantityReceived) })
+          .set({ quantityReceived: String(quantityReceived), unloaded: item.unloaded })
           .where(eq(stockOrderItems.id, item.orderItemId));
 
-        if (item.quantityReceived > 0) {
+        if (quantityReceived > 0) {
           const stockItemId = existingById.get(item.orderItemId)!;
-          totalReceived += item.quantityReceived;
+          totalReceived += quantityReceived;
 
           await tx.insert(stockMoves).values({
             stockItemId,
             date: todayDateString(),
             kind: "delivery",
-            quantity: String(item.quantityReceived),
+            quantity: String(quantityReceived),
             note: `Order ${data.orderId.slice(0, 8)} delivery`,
             byMemberId: actor.memberId,
           });
@@ -289,7 +301,7 @@ export const confirmReceipt = createServerFn({ method: "POST" })
           await tx
             .update(stockItems)
             .set({
-              level: sql`${stockItems.level} + ${item.quantityReceived}`,
+              level: sql`${stockItems.level} + ${quantityReceived}`,
               updatedAt: new Date(),
             })
             .where(eq(stockItems.id, stockItemId));
@@ -316,6 +328,42 @@ export const confirmReceipt = createServerFn({ method: "POST" })
       items: data.items.length,
       totalReceived,
     });
+
+    return { success: true as const };
+  });
+
+/**
+ * Branch ticks a single item while counting the delivery off the van. Fires
+ * on every tap (persisted immediately) so a half-checked delivery survives a
+ * refresh; not batched with `confirmReceipt`, which is the actual
+ * stock-levels-changing step once every item has been counted.
+ */
+export const setItemUnloaded = createServerFn({ method: "POST" })
+  .validator(z.object({ orderItemId: z.string().uuid(), unloaded: z.boolean() }))
+  .handler(async ({ data }) => {
+    const { db, stockOrderItems, stockOrders } = await import("@/db");
+    const { eq } = await import("drizzle-orm");
+
+    const item = await db.query.stockOrderItems.findFirst({
+      where: eq(stockOrderItems.id, data.orderItemId),
+    });
+    if (!item) throw new Error("Order item not found");
+
+    const order = await db.query.stockOrders.findFirst({ where: eq(stockOrders.id, item.orderId) });
+    if (!order) throw new Error("Order not found");
+
+    const { requireLocationMember } = await import("@/lib/auth.server");
+    await requireLocationMember(order.locationId);
+
+    if (order.status !== "sent") throw new Error("Order isn't on the van yet");
+    if (data.unloaded && Number(item.quantitySent ?? 0) <= 0) {
+      throw new Error("Nothing was sent for this item");
+    }
+
+    await db
+      .update(stockOrderItems)
+      .set({ unloaded: data.unloaded })
+      .where(eq(stockOrderItems.id, data.orderItemId));
 
     return { success: true as const };
   });
@@ -360,6 +408,8 @@ export const listWarehouseOrders = createServerFn({ method: "GET" })
             quantityOrdered: stockOrderItems.quantityOrdered,
             quantitySent: stockOrderItems.quantitySent,
             quantityReceived: stockOrderItems.quantityReceived,
+            loaded: stockOrderItems.loaded,
+            unloaded: stockOrderItems.unloaded,
             itemName: stockItems.name,
             itemUnit: stockItems.unit,
           })
@@ -409,11 +459,50 @@ export const listWarehouseOrders = createServerFn({ method: "GET" })
           quantityOrdered: Number(it.quantityOrdered),
           quantitySent: it.quantitySent != null ? Number(it.quantitySent) : null,
           quantityReceived: it.quantityReceived != null ? Number(it.quantityReceived) : null,
+          loaded: it.loaded,
+          unloaded: it.unloaded,
         })),
     }));
   });
 
-/** Warehouse packs the van — adjusting quantities down if they're short — and sends it. */
+/**
+ * Warehouse ticks a single item while physically loading the van. Fires on
+ * every tap (persisted immediately) so a half-packed order survives a
+ * refresh or a different packer picking up the same order; not batched with
+ * `markOrderSent`, which is the actual dispatch step.
+ */
+export const setItemLoaded = createServerFn({ method: "POST" })
+  .validator(z.object({ orderItemId: z.string().uuid(), loaded: z.boolean() }))
+  .handler(async ({ data }) => {
+    const { requireWarehouse } = await import("@/lib/auth.server");
+    await requireWarehouse();
+
+    const { db, stockOrderItems, stockOrders } = await import("@/db");
+    const { eq } = await import("drizzle-orm");
+
+    const item = await db.query.stockOrderItems.findFirst({
+      where: eq(stockOrderItems.id, data.orderItemId),
+    });
+    if (!item) throw new Error("Order item not found");
+
+    const order = await db.query.stockOrders.findFirst({ where: eq(stockOrders.id, item.orderId) });
+    if (!order) throw new Error("Order not found");
+    if (order.status !== "placed") throw new Error("Order has already gone out");
+
+    await db
+      .update(stockOrderItems)
+      .set({ loaded: data.loaded })
+      .where(eq(stockOrderItems.id, data.orderItemId));
+
+    return { success: true as const };
+  });
+
+/**
+ * Warehouse packs the van — adjusting quantities down if they're short — and
+ * sends it. `loaded` mirrors the packing checklist ticks (see
+ * `setItemLoaded`) and is authoritative here: an item not loaded always
+ * dispatches 0, regardless of whatever quantity happens to be in the payload.
+ */
 export const markOrderSent = createServerFn({ method: "POST" })
   .validator(
     z.object({
@@ -422,6 +511,7 @@ export const markOrderSent = createServerFn({ method: "POST" })
         .array(
           z.object({
             orderItemId: z.string().uuid(),
+            loaded: z.boolean(),
             quantitySent: z.number().min(0),
           }),
         )
@@ -451,9 +541,11 @@ export const markOrderSent = createServerFn({ method: "POST" })
 
     await db.transaction(async (tx) => {
       for (const item of data.items) {
+        // Not loaded → nothing went on the van, regardless of the payload qty.
+        const quantitySent = item.loaded ? item.quantitySent : 0;
         await tx
           .update(stockOrderItems)
-          .set({ quantitySent: String(item.quantitySent) })
+          .set({ quantitySent: String(quantitySent), loaded: item.loaded })
           .where(eq(stockOrderItems.id, item.orderItemId));
       }
 

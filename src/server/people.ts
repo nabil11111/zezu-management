@@ -87,6 +87,18 @@ function buildMonthlySummary(
   });
 }
 
+/** Sums shiftHours across a set of rows (caller pre-filters by status). */
+function sumShiftHours(
+  rows: Array<{ clockInAt: Date | string; clockOutAt: Date | string | null }>,
+): number {
+  let total = 0;
+  for (const row of rows) {
+    if (!row.clockOutAt) continue;
+    total += shiftHours(row.clockInAt, row.clockOutAt) ?? 0;
+  }
+  return Math.round(total * 100) / 100;
+}
+
 /** Generates a random unique 4-digit code + its hash. Re-rolls on collision. */
 async function generateUniqueCode(): Promise<{ code: string; codeHash: string }> {
   const { hashCode } = await import("@/lib/auth.server");
@@ -132,7 +144,7 @@ export const listMembers = createServerFn({ method: "GET" }).handler(async () =>
   const { requireManager } = await import("@/lib/auth.server");
   const { actor, locationIds } = await requireManager();
 
-  const { db, members, memberLocations, shifts } = await import("@/db");
+  const { db, members, memberLocations, shifts, memberPayments } = await import("@/db");
   const { eq, and, inArray } = await import("drizzle-orm");
 
   let scopedIds: string[] | null = null; // null = no restriction (CEO)
@@ -171,28 +183,56 @@ export const listMembers = createServerFn({ method: "GET" }).handler(async () =>
     .where(and(eq(shifts.status, "verified"), inArray(shifts.memberId, rowIds)));
 
   const hoursByMember = new Map<string, number>();
+  const allTimeVerifiedByMember = new Map<string, number>();
   for (const s of shiftRows) {
     if (!s.clockOutAt) continue;
-    if (londonMonthKey(new Date(s.clockOutAt)) !== currentMonthKey) continue;
     const hrs = shiftHours(s.clockInAt, s.clockOutAt) ?? 0;
+    allTimeVerifiedByMember.set(s.memberId, (allTimeVerifiedByMember.get(s.memberId) ?? 0) + hrs);
+    if (londonMonthKey(new Date(s.clockOutAt)) !== currentMonthKey) continue;
     hoursByMember.set(s.memberId, (hoursByMember.get(s.memberId) ?? 0) + hrs);
   }
 
-  return memberRows.map((m) => ({
-    id: m.id,
-    name: m.name,
-    role: m.role as MemberRole,
-    active: m.active,
-    hourlyRate: m.hourlyRate,
-    phone: m.phone,
-    startedAt: m.startedAt,
-    locations: m.memberLocations.map((ml) => ({ id: ml.location.id, name: ml.location.name })),
-    onboarding: {
-      done: m.onboardingSteps.filter((s) => s.done).length,
-      total: m.onboardingSteps.length,
-    },
-    thisMonthVerifiedHours: Math.round((hoursByMember.get(m.id) ?? 0) * 100) / 100,
-  }));
+  const paymentRows = await db
+    .select({ memberId: memberPayments.memberId, hours: memberPayments.hours })
+    .from(memberPayments)
+    .where(inArray(memberPayments.memberId, rowIds));
+
+  const paidHoursByMember = new Map<string, number>();
+  for (const p of paymentRows) {
+    paidHoursByMember.set(p.memberId, (paidHoursByMember.get(p.memberId) ?? 0) + Number(p.hours));
+  }
+
+  return memberRows.map((m) => {
+    const isCeo = m.role === "ceo";
+    const rate = m.hourlyRate !== null ? Number(m.hourlyRate) : null;
+    const totalVerified = allTimeVerifiedByMember.get(m.id) ?? 0;
+    const paidHours = paidHoursByMember.get(m.id) ?? 0;
+    const outstandingHours = isCeo
+      ? null
+      : Math.max(0, Math.round((totalVerified - paidHours) * 100) / 100);
+    const payableAmount =
+      !isCeo && outstandingHours !== null && rate !== null
+        ? Math.round(outstandingHours * rate * 100) / 100
+        : null;
+
+    return {
+      id: m.id,
+      name: m.name,
+      role: m.role as MemberRole,
+      active: m.active,
+      hourlyRate: m.hourlyRate,
+      phone: m.phone,
+      startedAt: m.startedAt,
+      locations: m.memberLocations.map((ml) => ({ id: ml.location.id, name: ml.location.name })),
+      onboarding: {
+        done: m.onboardingSteps.filter((s) => s.done).length,
+        total: m.onboardingSteps.length,
+      },
+      thisMonthVerifiedHours: Math.round((hoursByMember.get(m.id) ?? 0) * 100) / 100,
+      outstandingHours,
+      payableAmount,
+    };
+  });
 });
 
 /** Full profile + onboarding + last 20 shifts + 6-month pay summary. */
@@ -202,7 +242,7 @@ export const getMember = createServerFn({ method: "GET" })
     const { requireManager } = await import("@/lib/auth.server");
     const { actor, locationIds } = await requireManager();
 
-    const { db, members, shifts } = await import("@/db");
+    const { db, members, shifts, memberPayments } = await import("@/db");
     const { eq } = await import("drizzle-orm");
 
     const member = await db.query.members.findFirst({
@@ -237,6 +277,23 @@ export const getMember = createServerFn({ method: "GET" })
       columns: { clockInAt: true, clockOutAt: true, status: true },
     });
 
+    const onboardingComplete = onboardingSteps.length === 0 || onboardingSteps.every((s) => s.done);
+
+    const totalVerifiedHours = sumShiftHours(
+      allShiftsForSummary.filter((s) => s.status === "verified"),
+    );
+
+    const paymentRows = await db.query.memberPayments.findMany({
+      where: eq(memberPayments.memberId, data.id),
+      with: { payer: true },
+      orderBy: (p, { desc }) => [desc(p.createdAt)],
+    });
+    const paidHours =
+      Math.round(paymentRows.reduce((sum, p) => sum + Number(p.hours), 0) * 100) / 100;
+    const outstandingHours = Math.max(0, Math.round((totalVerifiedHours - paidHours) * 100) / 100);
+    const rate = member.hourlyRate !== null ? Number(member.hourlyRate) : null;
+    const payableAmount = rate !== null ? Math.round(outstandingHours * rate * 100) / 100 : null;
+
     return {
       id: member.id,
       name: member.name,
@@ -260,6 +317,19 @@ export const getMember = createServerFn({ method: "GET" })
         status: s.status as "pending" | "verified" | "rejected",
       })),
       monthlySummary: buildMonthlySummary(allShiftsForSummary, member.hourlyRate),
+      onboardingComplete,
+      totalVerifiedHours,
+      paidHours,
+      outstandingHours,
+      payableAmount,
+      payments: paymentRows.slice(0, 20).map((p) => ({
+        id: p.id,
+        amount: Number(p.amount),
+        hours: Number(p.hours),
+        note: p.note,
+        paidByName: p.payer.name,
+        createdAt: p.createdAt,
+      })),
     };
   });
 
@@ -538,4 +608,72 @@ export const deleteOnboardingStep = createServerFn({ method: "POST" })
 
     await logActivity("member", step.memberId, "onboarding_step_deleted", { step: step.title });
     return { success: true as const };
+  });
+
+// ── pay ──────────────────────────────────────────────────────────────────
+
+const recordPaymentSchema = z.object({
+  memberId: z.string().uuid(),
+  amount: z.number().positive(),
+  hours: z.number().positive(),
+  note: z.string().optional(),
+});
+
+/**
+ * Manager+: records a weekly payment against a member's outstanding
+ * verified-hours balance. Must share a location with the member, or be CEO.
+ * Hours paid can never exceed what's currently outstanding.
+ */
+export const recordPayment = createServerFn({ method: "POST" })
+  .validator(recordPaymentSchema)
+  .handler(async ({ data }) => {
+    const { requireManager } = await import("@/lib/auth.server");
+    const { actor, locationIds } = await requireManager();
+
+    const allowed = await actorSharesLocationWithMember(locationIds, data.memberId);
+    if (!allowed) throw new Error("No access to this member");
+
+    const { db, members, shifts, memberPayments } = await import("@/db");
+    const { eq, and } = await import("drizzle-orm");
+
+    const member = await db.query.members.findFirst({ where: eq(members.id, data.memberId) });
+    if (!member) throw new Error("Member not found");
+
+    const verifiedRows = await db.query.shifts.findMany({
+      where: and(eq(shifts.memberId, data.memberId), eq(shifts.status, "verified")),
+      columns: { clockInAt: true, clockOutAt: true },
+    });
+    const totalVerifiedHours = sumShiftHours(verifiedRows);
+
+    const paidRows = await db.query.memberPayments.findMany({
+      where: eq(memberPayments.memberId, data.memberId),
+      columns: { hours: true },
+    });
+    const paidHours = Math.round(paidRows.reduce((sum, p) => sum + Number(p.hours), 0) * 100) / 100;
+
+    const outstandingHours = Math.max(0, Math.round((totalVerifiedHours - paidHours) * 100) / 100);
+    const hours = Math.round(data.hours * 100) / 100;
+
+    if (hours > outstandingHours + 0.005) {
+      throw new Error(`Only ${outstandingHours}h outstanding — can't record ${hours}h`);
+    }
+
+    const [row] = await db
+      .insert(memberPayments)
+      .values({
+        memberId: data.memberId,
+        amount: String(data.amount),
+        hours: String(hours),
+        note: data.note ?? null,
+        paidBy: actor.memberId,
+      })
+      .returning();
+
+    await logActivity("member_payment", data.memberId, "paid", {
+      name: member.name,
+      amount: data.amount,
+      hours,
+    });
+
+    return { id: row.id };
   });

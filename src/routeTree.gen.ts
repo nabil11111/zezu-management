@@ -18,9 +18,11 @@ import { Route as AuthedStockRouteImport } from './routes/_authed.stock'
 import { Route as AuthedShiftsRouteImport } from './routes/_authed.shifts'
 import { Route as AuthedSettingsRouteImport } from './routes/_authed.settings'
 import { Route as AuthedSalesRouteImport } from './routes/_authed.sales'
+import { Route as AuthedRotaRouteImport } from './routes/_authed.rota'
 import { Route as AuthedOrdersRouteImport } from './routes/_authed.orders'
 import { Route as AuthedMyRouteImport } from './routes/_authed.my'
 import { Route as AuthedMenuRouteImport } from './routes/_authed.menu'
+import { Route as AuthedInsightsRouteImport } from './routes/_authed.insights'
 import { Route as AuthedPeopleIndexRouteImport } from './routes/_authed.people.index'
 import { Route as AuthedPeopleMemberIdRouteImport } from './routes/_authed.people.$memberId'
 
@@ -68,6 +70,11 @@ const AuthedSalesRoute = AuthedSalesRouteImport.update({
   path: '/sales',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedRotaRoute = AuthedRotaRouteImport.update({
+  id: '/rota',
+  path: '/rota',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedOrdersRoute = AuthedOrdersRouteImport.update({
   id: '/orders',
   path: '/orders',
@@ -81,6 +88,11 @@ const AuthedMyRoute = AuthedMyRouteImport.update({
 const AuthedMenuRoute = AuthedMenuRouteImport.update({
   id: '/menu',
   path: '/menu',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedInsightsRoute = AuthedInsightsRouteImport.update({
+  id: '/insights',
+  path: '/insights',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedPeopleIndexRoute = AuthedPeopleIndexRouteImport.update({
@@ -97,9 +109,11 @@ const AuthedPeopleMemberIdRoute = AuthedPeopleMemberIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AuthedIndexRoute
   '/login': typeof LoginRoute
+  '/insights': typeof AuthedInsightsRoute
   '/menu': typeof AuthedMenuRoute
   '/my': typeof AuthedMyRoute
   '/orders': typeof AuthedOrdersRoute
+  '/rota': typeof AuthedRotaRoute
   '/sales': typeof AuthedSalesRoute
   '/settings': typeof AuthedSettingsRoute
   '/shifts': typeof AuthedShiftsRoute
@@ -111,9 +125,11 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
+  '/insights': typeof AuthedInsightsRoute
   '/menu': typeof AuthedMenuRoute
   '/my': typeof AuthedMyRoute
   '/orders': typeof AuthedOrdersRoute
+  '/rota': typeof AuthedRotaRoute
   '/sales': typeof AuthedSalesRoute
   '/settings': typeof AuthedSettingsRoute
   '/shifts': typeof AuthedShiftsRoute
@@ -128,9 +144,11 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authed': typeof AuthedRouteWithChildren
   '/login': typeof LoginRoute
+  '/_authed/insights': typeof AuthedInsightsRoute
   '/_authed/menu': typeof AuthedMenuRoute
   '/_authed/my': typeof AuthedMyRoute
   '/_authed/orders': typeof AuthedOrdersRoute
+  '/_authed/rota': typeof AuthedRotaRoute
   '/_authed/sales': typeof AuthedSalesRoute
   '/_authed/settings': typeof AuthedSettingsRoute
   '/_authed/shifts': typeof AuthedShiftsRoute
@@ -146,9 +164,11 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/insights'
     | '/menu'
     | '/my'
     | '/orders'
+    | '/rota'
     | '/sales'
     | '/settings'
     | '/shifts'
@@ -160,9 +180,11 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
+    | '/insights'
     | '/menu'
     | '/my'
     | '/orders'
+    | '/rota'
     | '/sales'
     | '/settings'
     | '/shifts'
@@ -176,9 +198,11 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_authed'
     | '/login'
+    | '/_authed/insights'
     | '/_authed/menu'
     | '/_authed/my'
     | '/_authed/orders'
+    | '/_authed/rota'
     | '/_authed/sales'
     | '/_authed/settings'
     | '/_authed/shifts'
@@ -261,6 +285,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedSalesRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/rota': {
+      id: '/_authed/rota'
+      path: '/rota'
+      fullPath: '/rota'
+      preLoaderRoute: typeof AuthedRotaRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/orders': {
       id: '/_authed/orders'
       path: '/orders'
@@ -282,6 +313,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedMenuRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/insights': {
+      id: '/_authed/insights'
+      path: '/insights'
+      fullPath: '/insights'
+      preLoaderRoute: typeof AuthedInsightsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/people/': {
       id: '/_authed/people/'
       path: '/people'
@@ -300,9 +338,11 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthedRouteChildren {
+  AuthedInsightsRoute: typeof AuthedInsightsRoute
   AuthedMenuRoute: typeof AuthedMenuRoute
   AuthedMyRoute: typeof AuthedMyRoute
   AuthedOrdersRoute: typeof AuthedOrdersRoute
+  AuthedRotaRoute: typeof AuthedRotaRoute
   AuthedSalesRoute: typeof AuthedSalesRoute
   AuthedSettingsRoute: typeof AuthedSettingsRoute
   AuthedShiftsRoute: typeof AuthedShiftsRoute
@@ -314,9 +354,11 @@ interface AuthedRouteChildren {
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
+  AuthedInsightsRoute: AuthedInsightsRoute,
   AuthedMenuRoute: AuthedMenuRoute,
   AuthedMyRoute: AuthedMyRoute,
   AuthedOrdersRoute: AuthedOrdersRoute,
+  AuthedRotaRoute: AuthedRotaRoute,
   AuthedSalesRoute: AuthedSalesRoute,
   AuthedSettingsRoute: AuthedSettingsRoute,
   AuthedShiftsRoute: AuthedShiftsRoute,

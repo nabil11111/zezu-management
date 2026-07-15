@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PrintReport, DownloadPdfButton } from "@/components/print-report";
 import { listLocations } from "@/server/locations";
 import {
   getStockOverview,
@@ -83,13 +84,16 @@ function StockPage() {
         kicker="Know tonight what you'll run out of tomorrow"
         title="Stock"
         actions={
-          locations.length > 1 ? (
-            <LocationPicker
-              locations={locations}
-              value={locationId ?? ""}
-              onChange={selectLocation}
-            />
-          ) : null
+          <>
+            {locations.length > 1 ? (
+              <LocationPicker
+                locations={locations}
+                value={locationId ?? ""}
+                onChange={selectLocation}
+              />
+            ) : null}
+            {locationId && overview ? <DownloadPdfButton label="Download PDF" /> : null}
+          </>
         }
       />
 
@@ -108,9 +112,85 @@ function StockPage() {
             locationName={currentLocation?.name ?? "ZEZU"}
           />
           <RecentMovesCard moves={overview.recentMoves} />
+
+          <StockReportPrint overview={overview} locationName={currentLocation?.name ?? "ZEZU"} />
         </>
       )}
     </div>
+  );
+}
+
+// ── PDF export ───────────────────────────────────────────────────────────
+
+function StockReportPrint({
+  overview,
+  locationName,
+}: {
+  overview: Overview;
+  locationName: string;
+}) {
+  return (
+    <PrintReport
+      title={`Stock levels — ${locationName}`}
+      subtitle="Running levels and the current order list"
+    >
+      <table className="mb-6 w-full border-collapse text-left text-sm">
+        <thead>
+          <tr className="border-b-2 border-[#1b1510]/20 font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">
+            <th className="py-2 pr-4">Item</th>
+            <th className="py-2 pr-4 text-right">Level</th>
+            <th className="py-2 pr-4">Unit</th>
+            <th className="py-2 pr-4 text-right">Threshold</th>
+            <th className="py-2 pr-4">Supplier</th>
+            <th className="py-2">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {overview.items.map((item) => (
+            <tr key={item.id} className="border-b border-[#1b1510]/10">
+              <td className="py-2 pr-4 font-bold">{item.name}</td>
+              <td className="py-2 pr-4 text-right">{formatQty(item.level)}</td>
+              <td className="py-2 pr-4">{item.unit}</td>
+              <td className="py-2 pr-4 text-right">
+                {item.lowThreshold != null ? formatQty(item.lowThreshold) : "—"}
+              </td>
+              <td className="py-2 pr-4">{item.supplier ?? "—"}</td>
+              <td className="py-2 font-bold">{item.isLow ? "LOW" : ""}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {overview.orderList.length > 0 ? (
+        <>
+          <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-[#6e6455]">
+            Order list, by supplier
+          </p>
+          <table className="w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b-2 border-[#1b1510]/20 font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">
+                <th className="py-2 pr-4">Supplier</th>
+                <th className="py-2 pr-4">Item</th>
+                <th className="py-2 text-right">Suggested qty</th>
+              </tr>
+            </thead>
+            <tbody>
+              {overview.orderList.map((group) =>
+                group.items.map((i, idx) => (
+                  <tr key={`${group.supplier}-${i.name}`} className="border-b border-[#1b1510]/10">
+                    <td className="py-2 pr-4 font-bold">{idx === 0 ? group.supplier : ""}</td>
+                    <td className="py-2 pr-4">{i.name}</td>
+                    <td className="py-2 text-right">
+                      {formatQty(i.suggestedQty)} {i.unit}
+                    </td>
+                  </tr>
+                )),
+              )}
+            </tbody>
+          </table>
+        </>
+      ) : null}
+    </PrintReport>
   );
 }
 

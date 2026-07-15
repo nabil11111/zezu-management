@@ -1,10 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-router";
 import { Store, PoundSterling, Package, Clock, UserRound, UtensilsCrossed } from "lucide-react";
 import { PageHeader } from "@/components/app-shell";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PixelCrew } from "@/components/pixel-crew";
 import { getLiveView, type LiveViewSite } from "@/server/live";
 import { formatGBP } from "@/server/types";
 import { cn } from "@/lib/utils";
@@ -49,6 +50,38 @@ function ukTime(iso: string): string {
     minute: "2-digit",
     hour12: false,
   }).format(new Date(iso));
+}
+
+/**
+ * Ticks every second after mount. Starts null so the server render and the
+ * first client render agree (no hydration mismatch) — the clock appears on
+ * the first tick.
+ */
+function useNow(): number | null {
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+/** HH:MM:SS, Europe/London — the wall clock in the header. */
+function LiveClock({ now }: { now: number | null }) {
+  return (
+    <span className="border-2 border-foreground/20 bg-card px-3 py-1.5 font-mono text-sm font-bold tabular-nums tracking-[0.15em] text-foreground">
+      {now === null
+        ? "--:--:--"
+        : new Intl.DateTimeFormat("en-GB", {
+            timeZone: "Europe/London",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+          }).format(new Date(now))}
+    </span>
+  );
 }
 
 function greetingFor(hour: number): string {
@@ -128,7 +161,15 @@ function StatusIndicator({ site, urgent }: { site: LiveViewSite; urgent: boolean
   );
 }
 
-function SiteCard({ site, urgentNotOpened }: { site: LiveViewSite; urgentNotOpened: boolean }) {
+function SiteCard({
+  site,
+  urgentNotOpened,
+  now,
+}: {
+  site: LiveViewSite;
+  urgentNotOpened: boolean;
+  now: number | null;
+}) {
   return (
     <Card
       className={cn(
@@ -149,33 +190,21 @@ function SiteCard({ site, urgentNotOpened }: { site: LiveViewSite; urgentNotOpen
       </CardHeader>
 
       <CardBody className="flex flex-1 flex-col gap-5">
-        {/* On the clock */}
+        {/* On the clock — the miniature. Hover/tap a character for name + time in. */}
         <div>
-          <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            On the clock
-          </p>
-          {site.clockedIn.length === 0 ? (
-            <p className="font-mono text-xs text-muted-foreground">Nobody clocked in</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {site.clockedIn.map((m) => (
-                <li
-                  key={m.memberId}
-                  className="flex items-center justify-between gap-2 border-b border-foreground/10 pb-2 last:border-b-0 last:pb-0"
-                >
-                  <span className="min-w-0 truncate text-sm font-bold text-foreground">
-                    {m.name}{" "}
-                    <span className="font-mono text-[10px] font-normal uppercase tracking-wider text-muted-foreground">
-                      · {m.role}
-                    </span>
-                  </span>
-                  <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-                    since {ukTime(m.clockInAt)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <div className="mb-2 flex items-baseline justify-between">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              On the clock
+            </p>
+            <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-foreground">
+              {site.clockedIn.length > 0 ? `×${site.clockedIn.length}` : ""}
+            </p>
+          </div>
+          <PixelCrew
+            members={site.clockedIn}
+            now={now ?? Date.now()}
+            dim={site.status !== "open"}
+          />
         </div>
 
         {/* Takings so far */}
@@ -236,7 +265,8 @@ function LiveViewPage() {
     return () => clearInterval(id);
   }, [router]);
 
-  const hour = ukHour();
+  const now = useNow();
+  const hour = ukHour(now === null ? undefined : new Date(now));
   const greeting = greetingFor(hour);
   const anyOpen = data.sites.some((s) => s.status === "open");
 
@@ -246,10 +276,13 @@ function LiveViewPage() {
         kicker="ZEZU Operations"
         title={`${greeting}, ${actor.name.split(" ")[0]}.`}
         actions={
-          <span className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            {anyOpen ? <span className="pulse-dot size-2 shrink-0 bg-pop" /> : null}
-            Live · {ukTime(data.generatedAt)}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              {anyOpen ? <span className="pulse-dot size-2 shrink-0 bg-pop" /> : null}
+              Live
+            </span>
+            <LiveClock now={now} />
+          </div>
         }
       />
       <p className="-mt-6 mb-8 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/60">
@@ -266,7 +299,7 @@ function LiveViewPage() {
         <>
           {/* Totals strip */}
           <div className="mb-10 grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-5">
-            <StatBlock label="Today so far" value={formatGBP(data.totals.todayTotal)} />
+            <StatBlock label="Sales this month so far" value={formatGBP(data.totals.monthTotal)} />
             <StatBlock label="On the clock" value={String(data.totals.clockedInCount)} />
             <StatBlock
               label="Low stock flags"
@@ -287,6 +320,7 @@ function LiveViewPage() {
                 key={site.id}
                 site={site}
                 urgentNotOpened={site.status === "not_opened" && hour >= 11}
+                now={now}
               />
             ))}
           </div>

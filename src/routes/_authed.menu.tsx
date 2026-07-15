@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from "react";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Pencil, Plus, Trash2, UtensilsCrossed } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, Plus, Trash2, UtensilsCrossed, X } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
@@ -32,6 +32,7 @@ type FormState = {
   description: string;
   videoUrl: string;
   coverUrl: string;
+  prepSteps: string[];
   isBestseller: boolean;
   published: boolean;
 };
@@ -43,6 +44,7 @@ const EMPTY_FORM: FormState = {
   description: "",
   videoUrl: "",
   coverUrl: "",
+  prepSteps: [],
   isBestseller: false,
   published: true,
 };
@@ -55,9 +57,24 @@ function itemToForm(item: Item): FormState {
     description: item.description ?? "",
     videoUrl: item.videoUrl ?? "",
     coverUrl: item.coverUrl ?? "",
+    prepSteps: item.prepSteps ?? [],
     isBestseller: item.isBestseller,
     published: item.published,
   };
+}
+
+/** Moves an array item from one index to another, returning a new array. */
+function moveItem<T>(arr: T[], from: number, to: number): T[] {
+  if (to < 0 || to >= arr.length) return arr;
+  const copy = [...arr];
+  const [moved] = copy.splice(from, 1);
+  copy.splice(to, 0, moved);
+  return copy;
+}
+
+/** Trims and drops blank lines, in order, ready to submit as jsonb. */
+function cleanSteps(steps: string[]): string[] {
+  return steps.map((s) => s.trim()).filter(Boolean);
 }
 
 /** Parses the price text field. Empty → no price. Invalid → null (caller rejects). */
@@ -132,6 +149,74 @@ function MenuItemFormFields({
           onChange={(e) => setForm((f) => ({ ...f, coverUrl: e.target.value }))}
           placeholder="https://…/dragon-chicken.jpg"
         />
+      </Field>
+      <Field
+        label="Preparation steps"
+        hint="Numbered, in cooking order — this is what the crew follows at the wok."
+      >
+        <div className="flex flex-col gap-3">
+          {form.prepSteps.map((step, i) => (
+            <div key={i} className="flex items-start gap-2">
+              <span className="mt-2 w-6 shrink-0 font-mono text-xs font-bold text-muted-foreground">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <Textarea
+                value={step}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    prepSteps: f.prepSteps.map((s, si) => (si === i ? e.target.value : s)),
+                  }))
+                }
+                placeholder={`Step ${i + 1}…`}
+                className="min-h-12"
+              />
+              <div className="flex shrink-0 flex-col gap-1">
+                <button
+                  type="button"
+                  disabled={i === 0}
+                  onClick={() =>
+                    setForm((f) => ({ ...f, prepSteps: moveItem(f.prepSteps, i, i - 1) }))
+                  }
+                  className="flex size-6 items-center justify-center border-2 border-foreground/25 text-foreground transition-colors hover:border-foreground disabled:cursor-not-allowed disabled:opacity-30"
+                  aria-label="Move step up"
+                >
+                  <ChevronUp className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  disabled={i === form.prepSteps.length - 1}
+                  onClick={() =>
+                    setForm((f) => ({ ...f, prepSteps: moveItem(f.prepSteps, i, i + 1) }))
+                  }
+                  className="flex size-6 items-center justify-center border-2 border-foreground/25 text-foreground transition-colors hover:border-foreground disabled:cursor-not-allowed disabled:opacity-30"
+                  aria-label="Move step down"
+                >
+                  <ChevronDown className="size-3.5" />
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setForm((f) => ({ ...f, prepSteps: f.prepSteps.filter((_, si) => si !== i) }))
+                }
+                className="mt-1.5 flex size-6 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-destructive"
+                aria-label="Remove step"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="self-start"
+            onClick={() => setForm((f) => ({ ...f, prepSteps: [...f.prepSteps, ""] }))}
+          >
+            <Plus /> Add step
+          </Button>
+        </div>
       </Field>
       <div className="flex items-center justify-between border-2 border-foreground/15 px-3 py-3">
         <Label>Bestseller</Label>
@@ -300,6 +385,7 @@ function AddDishDialog({ categories }: { categories: string[] }) {
           description: form.description.trim() || null,
           videoUrl: form.videoUrl.trim() || null,
           coverUrl: form.coverUrl.trim() || null,
+          prepSteps: cleanSteps(form.prepSteps),
           isBestseller: form.isBestseller,
           published: form.published,
         },
@@ -390,6 +476,7 @@ function DishCard({
             description: form.description.trim() || null,
             videoUrl: form.videoUrl.trim() || null,
             coverUrl: form.coverUrl.trim() || null,
+            prepSteps: cleanSteps(form.prepSteps),
             isBestseller: form.isBestseller,
             published: form.published,
           },
@@ -459,9 +546,16 @@ function DishCard({
             </div>
             <div className="border-t-2 border-foreground/15 px-3 py-3">
               <p className="truncate font-display text-lg uppercase text-foreground">{item.name}</p>
-              <p className="font-mono text-xs text-muted-foreground">
-                {item.price ? formatGBP(item.price) : "—"}
-              </p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-mono text-xs text-muted-foreground">
+                  {item.price ? formatGBP(item.price) : "—"}
+                </p>
+                {item.prepSteps && item.prepSteps.length > 0 ? (
+                  <Badge tone="neutral" className="shrink-0 text-gold">
+                    {item.prepSteps.length} steps
+                  </Badge>
+                ) : null}
+              </div>
             </div>
           </Card>
         </button>
@@ -487,6 +581,27 @@ function DishCard({
             ) : (
               <p className="text-sm text-muted-foreground">No recipe notes yet.</p>
             )}
+            {item.prepSteps && item.prepSteps.length > 0 ? (
+              <div className="flex flex-col gap-4 border-t-2 border-foreground/15 pt-5">
+                <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  How it's made
+                </p>
+                <ol className="flex flex-col gap-5">
+                  {item.prepSteps.map((step, i) => (
+                    <li key={i} className="flex items-start gap-4">
+                      <span className="font-display text-3xl leading-none text-pop shrink-0">
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                      <span className="pt-1 text-sm leading-relaxed text-foreground">{step}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : canManage ? (
+              <p className="border-t-2 border-foreground/15 pt-5 text-sm text-muted-foreground">
+                No prep steps yet — add them in Edit.
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-center gap-3">
               {item.category ? <Badge tone="outline">{item.category}</Badge> : null}
               {item.isBestseller ? (

@@ -264,6 +264,20 @@
   animation: fade-up 1.2s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
+/* Pixel-crew idle bob — snapped steps for the retro feel. */
+@keyframes pixel-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+.pixel-bob {
+  animation: pixel-bob 1.4s steps(2, jump-none) infinite;
+}
+
 /* Live "open" indicator on the site cards. */
 @keyframes pulse-dot {
   0%,
@@ -339,6 +353,14 @@
   display: none;
 }
 
+/* Print-only PDF reports (see src/components/print-report.tsx): pages mount
+   a hidden `.print-report` portal under <body>; "Download PDF" is just
+   window.print(). Reports print on paper-white with the light palette and
+   may flow across pages (unlike the one-page poster). */
+.print-report {
+  display: none;
+}
+
 @media print {
   @page {
     size: A4 portrait;
@@ -347,14 +369,37 @@
   html,
   body {
     height: auto !important;
-    overflow: hidden !important;
-    background: #080808 !important;
+    overflow: visible !important;
+    background: #fff !important;
   }
-  body > *:not(.qr-poster-print) {
+  /* Hide the app only when a print target exists — via :has() so a plain
+     Cmd+P on a page without one still prints normally. */
+  body:has(.qr-poster-print) > *:not(.qr-poster-print),
+  body:has(.print-report) > *:not(.print-report) {
     display: none !important;
+  }
+  body:has(.qr-poster-print) {
+    background: #080808 !important;
+    overflow: hidden !important;
   }
   .qr-poster-print {
     display: block !important;
+  }
+  .print-report {
+    display: block !important;
+    width: 100%;
+    padding: 12mm 14mm;
+    background: #fff !important;
+    color: #1b1510;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .print-report table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .print-report tr {
+    break-inside: avoid;
   }
   .qr-poster-print .qr-poster {
     /* 1mm shy of A4 in both axes so rounding never spills onto page 2. */

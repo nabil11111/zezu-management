@@ -48,6 +48,7 @@ export interface LiveViewResult {
   sites: LiveViewSite[];
   totals: {
     todayTotal: number;
+    monthTotal: number;
     clockedInCount: number;
     lowStockCount: number;
     pendingCount: number;
@@ -58,7 +59,7 @@ function emptyResult(): LiveViewResult {
   return {
     generatedAt: new Date().toISOString(),
     sites: [],
-    totals: { todayTotal: 0, clockedInCount: 0, lowStockCount: 0, pendingCount: 0 },
+    totals: { todayTotal: 0, monthTotal: 0, clockedInCount: 0, lowStockCount: 0, pendingCount: 0 },
   };
 }
 
@@ -68,13 +69,14 @@ export const getLiveView = createServerFn({ method: "GET" }).handler(
     const { requireManager } = await import("@/lib/auth.server");
     const { db, locations, shopDays, shifts, members, salesEntries, stockItems } =
       await import("@/db");
-    const { and, asc, eq, inArray, isNull, isNotNull } = await import("drizzle-orm");
+    const { and, asc, eq, gte, inArray, isNull, isNotNull, sql } = await import("drizzle-orm");
     const { todayDateString } = await import("@/server/types");
 
     const { locationIds } = await requireManager();
 
     const today = todayDateString();
     const yesterday = todayDateString(-1);
+    const monthStart = `${today.slice(0, 7)}-01`;
 
     const siteRows = await db
       .select({
@@ -95,78 +97,95 @@ export const getLiveView = createServerFn({ method: "GET" }).handler(
     const ids = siteRows.map((s) => s.id);
     if (ids.length === 0) return emptyResult();
 
-    const [shopDayRows, clockedInRows, pendingRows, todaySalesRows, yesterdaySalesRows, stockRows] =
-      await Promise.all([
-        // Today's shop-day row per location (at most one, per the unique index).
-        db
-          .select({
-            locationId: shopDays.locationId,
-            openedAt: shopDays.openedAt,
-            closedAt: shopDays.closedAt,
-            openerName: members.name,
-          })
-          .from(shopDays)
-          .innerJoin(members, eq(shopDays.openedBy, members.id))
-          .where(and(inArray(shopDays.locationId, ids), eq(shopDays.date, today))),
+    const [
+      shopDayRows,
+      clockedInRows,
+      pendingRows,
+      todaySalesRows,
+      yesterdaySalesRows,
+      stockRows,
+      monthSalesRows,
+    ] = await Promise.all([
+      // Today's shop-day row per location (at most one, per the unique index).
+      db
+        .select({
+          locationId: shopDays.locationId,
+          openedAt: shopDays.openedAt,
+          closedAt: shopDays.closedAt,
+          openerName: members.name,
+        })
+        .from(shopDays)
+        .innerJoin(members, eq(shopDays.openedBy, members.id))
+        .where(and(inArray(shopDays.locationId, ids), eq(shopDays.date, today))),
 
-        // Anyone currently clocked in (no clock-out yet) at these locations.
-        db
-          .select({
-            locationId: shifts.locationId,
-            memberId: shifts.memberId,
-            name: members.name,
-            role: members.role,
-            clockInAt: shifts.clockInAt,
-            status: shifts.status,
-          })
-          .from(shifts)
-          .innerJoin(members, eq(shifts.memberId, members.id))
-          .where(and(inArray(shifts.locationId, ids), isNull(shifts.clockOutAt)))
-          .orderBy(asc(shifts.clockInAt)),
+      // Anyone currently clocked in (no clock-out yet) at these locations.
+      db
+        .select({
+          locationId: shifts.locationId,
+          memberId: shifts.memberId,
+          name: members.name,
+          role: members.role,
+          clockInAt: shifts.clockInAt,
+          status: shifts.status,
+        })
+        .from(shifts)
+        .innerJoin(members, eq(shifts.memberId, members.id))
+        .where(and(inArray(shifts.locationId, ids), isNull(shifts.clockOutAt)))
+        .orderBy(asc(shifts.clockInAt)),
 
-        // Clocked-out shifts still awaiting manager verification.
-        db
-          .select({ locationId: shifts.locationId })
-          .from(shifts)
-          .where(
-            and(
-              inArray(shifts.locationId, ids),
-              eq(shifts.status, "pending"),
-              isNotNull(shifts.clockOutAt),
-            ),
+      // Clocked-out shifts still awaiting manager verification.
+      db
+        .select({ locationId: shifts.locationId })
+        .from(shifts)
+        .where(
+          and(
+            inArray(shifts.locationId, ids),
+            eq(shifts.status, "pending"),
+            isNotNull(shifts.clockOutAt),
           ),
+        ),
 
-        db
-          .select({
-            locationId: salesEntries.locationId,
-            uber: salesEntries.uber,
-            takeaway: salesEntries.takeaway,
-            dineIn: salesEntries.dineIn,
-          })
-          .from(salesEntries)
-          .where(and(inArray(salesEntries.locationId, ids), eq(salesEntries.date, today))),
+      db
+        .select({
+          locationId: salesEntries.locationId,
+          uber: salesEntries.uber,
+          takeaway: salesEntries.takeaway,
+          dineIn: salesEntries.dineIn,
+        })
+        .from(salesEntries)
+        .where(and(inArray(salesEntries.locationId, ids), eq(salesEntries.date, today))),
 
-        db
-          .select({
-            locationId: salesEntries.locationId,
-            uber: salesEntries.uber,
-            takeaway: salesEntries.takeaway,
-            dineIn: salesEntries.dineIn,
-          })
-          .from(salesEntries)
-          .where(and(inArray(salesEntries.locationId, ids), eq(salesEntries.date, yesterday))),
+      db
+        .select({
+          locationId: salesEntries.locationId,
+          uber: salesEntries.uber,
+          takeaway: salesEntries.takeaway,
+          dineIn: salesEntries.dineIn,
+        })
+        .from(salesEntries)
+        .where(and(inArray(salesEntries.locationId, ids), eq(salesEntries.date, yesterday))),
 
-        // Active stock items — low-stock threshold check happens in JS below
-        // since `level`/`lowThreshold` are numeric strings.
-        db
-          .select({
-            locationId: stockItems.locationId,
-            level: stockItems.level,
-            lowThreshold: stockItems.lowThreshold,
-          })
-          .from(stockItems)
-          .where(and(inArray(stockItems.locationId, ids), eq(stockItems.active, true))),
-      ]);
+      // Active stock items — low-stock threshold check happens in JS below
+      // since `level`/`lowThreshold` are numeric strings.
+      db
+        .select({
+          locationId: stockItems.locationId,
+          level: stockItems.level,
+          lowThreshold: stockItems.lowThreshold,
+        })
+        .from(stockItems)
+        .where(and(inArray(stockItems.locationId, ids), eq(stockItems.active, true))),
+
+      // Month-to-date takings across the accessible sites — one number.
+      db
+        .select({
+          total: sql<string>`coalesce(sum(${salesEntries.uber} + ${salesEntries.takeaway} + ${salesEntries.dineIn}), 0)`,
+        })
+        .from(salesEntries)
+        .where(and(inArray(salesEntries.locationId, ids), gte(salesEntries.date, monthStart))),
+    ]);
+
+    const monthTotal = Number(monthSalesRows[0]?.total ?? 0);
 
     const shopDayByLocation = new Map<string, (typeof shopDayRows)[number]>();
     for (const row of shopDayRows) shopDayByLocation.set(row.locationId, row);
@@ -263,7 +282,7 @@ export const getLiveView = createServerFn({ method: "GET" }).handler(
     return {
       generatedAt: new Date().toISOString(),
       sites,
-      totals: { todayTotal, clockedInCount, lowStockCount, pendingCount },
+      totals: { todayTotal, monthTotal, clockedInCount, lowStockCount, pendingCount },
     };
   },
 );

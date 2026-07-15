@@ -127,9 +127,19 @@ export const clockAction = createServerFn({ method: "POST" })
     if (openShift) {
       if (openShift.locationId === location.id) {
         const clockOutAt = new Date();
+        // Managers' clock in/out doesn't need a second person to sign off —
+        // closing out their own shift auto-verifies it on the spot, so it
+        // never lands in the verification queue.
+        const isManager = member.role === "manager";
         const [updated] = await db
           .update(shifts)
-          .set({ clockOutAt, updatedAt: new Date() })
+          .set({
+            clockOutAt,
+            updatedAt: clockOutAt,
+            ...(isManager
+              ? { status: "verified" as const, verifiedBy: member.id, verifiedAt: clockOutAt }
+              : {}),
+          })
           .where(eq(shifts.id, openShift.id))
           .returning();
 
@@ -172,6 +182,15 @@ export const clockAction = createServerFn({ method: "POST" })
         isNull(shopDays.closedAt),
       ),
     });
+
+    // The CEO doesn't clock in — they can start the day, but once the shop's
+    // already running there's nothing here for them except a friendly nudge.
+    if (member.role === "ceo") {
+      if (!shopDay) {
+        return { kind: "can_open" as const, name: member.name };
+      }
+      return { kind: "ceo_ack" as const, name: member.name };
+    }
 
     if (!shopDay) {
       const allowed = await canOpenShop(member, location.id);
@@ -241,6 +260,15 @@ export const openShopViaQr = createServerFn({ method: "POST" })
       { locationName: location.name },
       { id: member.id, name: member.name },
     );
+
+    // The CEO opens the shop but never clocks in — nothing to insert.
+    if (member.role === "ceo") {
+      return {
+        kind: "opened" as const,
+        name: member.name,
+        locationName: location.name,
+      };
+    }
 
     // Don't double-clock-in if this member is already on an open shift
     // somewhere (shouldn't happen on the happy path, but stay safe).
@@ -427,16 +455,22 @@ export const openShop = createServerFn({ method: "POST" })
     };
   });
 
-/** Manager control: close today's shop day for a location. */
+/**
+ * Manager control: close today's shop day for a location. Closing clocks
+ * everyone out — nobody should still be "on the clock" once the shop's shut.
+ * Managers' own shifts are auto-verified in the same stroke (their clock
+ * in/out doesn't need a second person to sign off); staff shifts stay
+ * 'pending' for the usual verification queue.
+ */
 export const closeShop = createServerFn({ method: "POST" })
   .validator(z.object({ locationId: z.string().uuid() }))
   .handler(async ({ data }) => {
     const { requireManager, assertLocationAccess } = await import("@/lib/auth.server");
-    const { locationIds } = await requireManager();
+    const { actor, locationIds } = await requireManager();
     assertLocationAccess(locationIds, data.locationId);
 
-    const { db, shopDays, locations, members } = await import("@/db");
-    const { and, eq, isNull } = await import("drizzle-orm");
+    const { db, shopDays, locations, members, shifts } = await import("@/db");
+    const { and, eq, isNull, inArray } = await import("drizzle-orm");
 
     const today = todayDateString();
     const existing = await db.query.shopDays.findFirst({
@@ -448,9 +482,11 @@ export const closeShop = createServerFn({ method: "POST" })
     });
     if (!existing) throw new Error("Shop is not open");
 
+    const closedAt = new Date();
+
     const [updated] = await db
       .update(shopDays)
-      .set({ closedAt: new Date(), updatedAt: new Date() })
+      .set({ closedAt, updatedAt: closedAt })
       .where(eq(shopDays.id, existing.id))
       .returning();
 
@@ -459,13 +495,50 @@ export const closeShop = createServerFn({ method: "POST" })
     });
     const opener = await db.query.members.findFirst({ where: eq(members.id, updated.openedBy) });
 
-    await logActivity("shop_day", updated.id, "closed", { locationName: location?.name });
+    // Clock out every shift still open at this location. Managers get
+    // auto-verified (verifiedBy = the person closing the shop); staff shifts
+    // stay pending, same as any other clock-out.
+    const openShifts = await db.query.shifts.findMany({
+      where: and(eq(shifts.locationId, data.locationId), isNull(shifts.clockOutAt)),
+    });
+
+    let clockedOutCount = 0;
+    if (openShifts.length) {
+      const openMemberIds = Array.from(new Set(openShifts.map((s) => s.memberId)));
+      const openMembers = await db.query.members.findMany({
+        where: inArray(members.id, openMemberIds),
+      });
+      const memberRole = new Map(openMembers.map((m) => [m.id, m.role]));
+
+      await Promise.all(
+        openShifts.map((s) => {
+          const isManager = memberRole.get(s.memberId) === "manager";
+          return db
+            .update(shifts)
+            .set({
+              clockOutAt: closedAt,
+              updatedAt: closedAt,
+              ...(isManager
+                ? { status: "verified" as const, verifiedBy: actor.memberId, verifiedAt: closedAt }
+                : {}),
+            })
+            .where(eq(shifts.id, s.id));
+        }),
+      );
+      clockedOutCount = openShifts.length;
+    }
+
+    await logActivity("shop_day", updated.id, "closed", {
+      locationName: location?.name,
+      clockedOutCount,
+    });
 
     return {
       locationId: updated.locationId,
       openedAt: updated.openedAt.toISOString(),
       openedByName: opener?.name ?? "Unknown",
       closedAt: updated.closedAt!.toISOString(),
+      clockedOutCount,
     };
   });
 
