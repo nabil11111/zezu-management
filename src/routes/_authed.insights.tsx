@@ -13,6 +13,13 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { PageHeader } from "@/components/app-shell";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PrintReport, DownloadPdfButton } from "@/components/print-report";
 import { getInsights } from "@/server/insights";
 import { formatGBP, todayDateString } from "@/server/types";
@@ -86,13 +93,23 @@ export const Route = createFileRoute("/_authed/insights")({
   },
   // Optional-typed so plain <Link to="/insights"> works; the current month
   // is always applied as the default, so a value is present at runtime.
-  validateSearch: (s: Record<string, unknown>): { month?: string } => {
+  validateSearch: (s: Record<string, unknown>): { month?: string; site?: string } => {
     const month =
       typeof s.month === "string" && /^\d{4}-\d{2}$/.test(s.month) ? s.month : currentMonth();
-    return { month };
+    const site = typeof s.site === "string" && s.site.length > 0 ? s.site : "all";
+    return { month, site };
   },
-  loaderDeps: ({ search }) => ({ month: search.month ?? currentMonth() }),
-  loader: async ({ deps }) => getInsights({ data: { month: deps.month } }),
+  loaderDeps: ({ search }) => ({
+    month: search.month ?? currentMonth(),
+    site: search.site ?? "all",
+  }),
+  loader: async ({ deps }) =>
+    getInsights({
+      data: {
+        month: deps.month,
+        locationId: deps.site === "all" ? undefined : deps.site,
+      },
+    }),
   component: InsightsPage,
 });
 
@@ -112,6 +129,24 @@ function InsightsPage() {
         title="Insights"
         actions={
           <>
+            {data.allSites.length > 1 ? (
+              <Select
+                value={search.site ?? "all"}
+                onValueChange={(v) => navigate({ search: (prev) => ({ ...prev, site: v }) })}
+              >
+                <SelectTrigger className="w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All stores</SelectItem>
+                  {data.allSites.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
             <div className="flex items-center border-2 border-foreground/20">
               <Button
                 variant="ghost"

@@ -172,6 +172,8 @@ function MemberCard({ member }: { member: PeopleMember }) {
     member.onboarding.total > 0
       ? Math.round((member.onboarding.done / member.onboarding.total) * 100)
       : 0;
+  const onboardingDone =
+    member.onboarding.total === 0 || member.onboarding.done >= member.onboarding.total;
   const payableAmount = member.payableAmount;
 
   return (
@@ -198,27 +200,31 @@ function MemberCard({ member }: { member: PeopleMember }) {
             </div>
           </div>
 
-          <div
-            className={cn(
-              "mt-auto grid gap-4 border-t-2 border-foreground/10 pt-4",
-              isCeo ? "grid-cols-1" : "grid-cols-2",
-            )}
-          >
-            <div>
-              <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-                Onboarding
-              </p>
-              <div className="mt-1.5 flex items-center gap-2">
-                <div className="h-1.5 flex-1 bg-muted">
-                  <div className="h-full bg-pop" style={{ width: `${pct}%` }} />
+          {/* Onboarding progress shows only while it's in progress — once
+              done it disappears and the hours/pay summary takes the row. */}
+          {isCeo ? null : (
+            <div
+              className={cn(
+                "mt-auto grid gap-4 border-t-2 border-foreground/10 pt-4",
+                onboardingDone ? "grid-cols-1" : "grid-cols-2",
+              )}
+            >
+              {!onboardingDone ? (
+                <div>
+                  <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                    Onboarding
+                  </p>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <div className="h-1.5 flex-1 bg-muted">
+                      <div className="h-full bg-pop" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="shrink-0 font-mono text-[10px] font-bold text-foreground">
+                      {member.onboarding.done}/{member.onboarding.total}
+                    </span>
+                  </div>
                 </div>
-                <span className="shrink-0 font-mono text-[10px] font-bold text-foreground">
-                  {member.onboarding.done}/{member.onboarding.total}
-                </span>
-              </div>
-            </div>
-            {isCeo ? null : (
-              <div className="text-right">
+              ) : null}
+              <div className={cn(!onboardingDone && "text-right")}>
                 <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
                   This month
                 </p>
@@ -231,8 +237,8 @@ function MemberCard({ member }: { member: PeopleMember }) {
                   </p>
                 ) : null}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </CardBody>
       </Card>
     </Link>

@@ -66,6 +66,8 @@ type Totals = Omit<SiteInsight, "id" | "name">;
 
 interface Insights {
   month: string;
+  /** Every active site — for the store filter picker, regardless of scope. */
+  allSites: Array<{ id: string; name: string }>;
   sites: SiteInsight[];
   totals: Totals;
   bestDay: { date: string; siteName: string; total: number } | null;
@@ -80,6 +82,8 @@ const insightsInput = z
       .string()
       .regex(/^\d{4}-\d{2}$/, "Use YYYY-MM")
       .optional(),
+    // Scope everything (sales, hours, orders, weekly, payroll) to one store.
+    locationId: z.string().uuid().optional(),
   })
   .optional();
 
@@ -104,6 +108,7 @@ export const getInsights = createServerFn({ method: "GET" })
       salesEntries,
       shifts,
       members,
+      memberLocations,
       stockOrders,
       stockOrderItems,
       memberPayments,
@@ -141,10 +146,24 @@ export const getInsights = createServerFn({ method: "GET" })
       .from(memberPayments)
       .groupBy(memberPayments.memberId);
 
+    // When a store filter is active, payroll counts only that store's crew.
     const payrollMembers = await db
       .select({ id: members.id, hourlyRate: members.hourlyRate })
       .from(members)
-      .where(ne(members.role, "ceo"));
+      .where(
+        and(
+          ne(members.role, "ceo"),
+          data?.locationId
+            ? inArray(
+                members.id,
+                db
+                  .select({ id: memberLocations.memberId })
+                  .from(memberLocations)
+                  .where(eq(memberLocations.locationId, data.locationId)),
+              )
+            : undefined,
+        ),
+      );
 
     const verifiedHoursMap = new Map(verifiedHoursRows.map((r) => [r.memberId, Number(r.hours)]));
     const paidHoursMap = new Map(paidHoursRows.map((r) => [r.memberId, Number(r.hours)]));
@@ -165,15 +184,21 @@ export const getInsights = createServerFn({ method: "GET" })
     };
 
     // ── active sites ─────────────────────────────────────────────────────
-    const siteRows = await db
+    const allSiteRows = await db
       .select({ id: locations.id, name: locations.name })
       .from(locations)
       .where(eq(locations.active, true))
       .orderBy(asc(locations.sortOrder), asc(locations.name));
 
+    // Every query below keys off `siteRows`, so scoping here scopes it all.
+    const siteRows = data?.locationId
+      ? allSiteRows.filter((s) => s.id === data.locationId)
+      : allSiteRows;
+
     if (siteRows.length === 0) {
       return {
         month,
+        allSites: allSiteRows,
         sites: [],
         totals: emptyTotals,
         bestDay: null,
@@ -428,5 +453,5 @@ export const getInsights = createServerFn({ method: "GET" })
       },
     };
 
-    return { month, sites, totals, bestDay, worstDay, weekly, payroll };
+    return { month, allSites: allSiteRows, sites, totals, bestDay, worstDay, weekly, payroll };
   });

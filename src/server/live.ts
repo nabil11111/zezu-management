@@ -191,7 +191,12 @@ export const getLiveView = createServerFn({ method: "GET" }).handler(
     for (const row of shopDayRows) shopDayByLocation.set(row.locationId, row);
 
     const clockedInByLocation = new Map<string, LiveViewClockedInMember[]>();
+    const londonDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" });
     for (const row of clockedInRows) {
+      // Nobody is "on the clock" across days. Shifts dangling from a
+      // previous day are display-noise here (they get auto-rejected the
+      // next time that shop opens) — never show them as present.
+      if (londonDay.format(row.clockInAt) !== today) continue;
       const list = clockedInByLocation.get(row.locationId) ?? [];
       list.push({
         memberId: row.memberId,
@@ -247,7 +252,8 @@ export const getLiveView = createServerFn({ method: "GET" }).handler(
           ? "closed"
           : "open";
 
-      const clockedIn = clockedInByLocation.get(site.id) ?? [];
+      // A shop that isn't open has nobody on the clock, by definition.
+      const clockedIn = status === "open" ? (clockedInByLocation.get(site.id) ?? []) : [];
       const pendingVerifications = pendingByLocation.get(site.id) ?? 0;
       const todaySales = todaySalesByLocation.get(site.id) ?? null;
       const yesterdaySales = yesterdaySalesByLocation.get(site.id) ?? null;

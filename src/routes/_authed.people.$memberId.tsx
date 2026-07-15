@@ -167,9 +167,12 @@ function MemberDetail() {
         {isCeo ? <ActiveCard member={member} /> : null}
       </div>
 
-      <div className="mt-6">
-        <OnboardingCard member={member} />
-      </div>
+      {/* Once onboarding is done, the checklist disappears — pay takes its place. */}
+      {!member.onboardingComplete ? (
+        <div className="mt-6">
+          <OnboardingCard member={member} />
+        </div>
+      ) : null}
 
       {!isMemberCeo ? (
         <div className="mt-6">

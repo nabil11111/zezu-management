@@ -26,6 +26,53 @@ function monthKeyLondon(d: Date): string {
   return `${year}-${month}`;
 }
 
+/** YYYY-MM-DD in Europe/London for a timestamp. */
+function dayKeyLondon(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(d);
+}
+
+/**
+ * A shift left open from a PREVIOUS business day is stale — nobody is "on
+ * the clock" across days. The system can't know when the person actually
+ * left, so it refuses to guess hours: the shift is closed at its own
+ * clock-in time (zero hours) and REJECTED, with a note, so it never counts
+ * for pay and the manager settles the real hours by hand. Runs whenever a
+ * shop opens and whenever a stale shift would block someone clocking in.
+ */
+async function rejectStaleOpenShifts(filter: {
+  locationId?: string;
+  memberId?: string;
+}): Promise<number> {
+  const { db, shifts } = await import("@/db");
+  const { and, eq, isNull } = await import("drizzle-orm");
+
+  const open = await db.query.shifts.findMany({
+    where: and(
+      isNull(shifts.clockOutAt),
+      filter.locationId ? eq(shifts.locationId, filter.locationId) : undefined,
+      filter.memberId ? eq(shifts.memberId, filter.memberId) : undefined,
+    ),
+  });
+
+  const today = todayDateString();
+  const stale = open.filter((s) => dayKeyLondon(s.clockInAt) < today);
+
+  for (const s of stale) {
+    await db
+      .update(shifts)
+      .set({
+        clockOutAt: s.clockInAt,
+        status: "rejected",
+        note: "Auto-closed: left on the clock overnight — hours need settling by hand",
+        updatedAt: new Date(),
+      })
+      .where(eq(shifts.id, s.id));
+    await logActivity("shift", s.id, "auto_closed_stale", { memberId: s.memberId });
+  }
+
+  return stale.length;
+}
+
 /** CEO always may; a manager may only for a location they're assigned to. */
 async function canOpenShop(
   member: { id: string; role: string },
@@ -119,10 +166,16 @@ export const clockAction = createServerFn({ method: "POST" })
     if (!member) throw new Error("Invalid code");
 
     // Anyone already on the clock somewhere resolves that shift first —
-    // either clocking out here, or being told to go clock out there.
-    const openShift = await db.query.shifts.findFirst({
+    // either clocking out here, or being told to go clock out there. A
+    // shift dangling from a previous day doesn't count: it gets auto-closed
+    // (rejected, zero hours) and this tap becomes a normal clock-in.
+    let openShift = await db.query.shifts.findFirst({
       where: and(eq(shifts.memberId, member.id), isNull(shifts.clockOutAt)),
     });
+    if (openShift && dayKeyLondon(openShift.clockInAt) < todayDateString()) {
+      await rejectStaleOpenShifts({ memberId: member.id });
+      openShift = undefined;
+    }
 
     if (openShift) {
       if (openShift.locationId === location.id) {
@@ -247,6 +300,10 @@ export const openShopViaQr = createServerFn({ method: "POST" })
       .insert(shopDays)
       .values({ locationId: location.id, date: today, openedBy: member.id })
       .onConflictDoNothing({ target: [shopDays.locationId, shopDays.date] });
+
+    // Opening starts a clean day: anyone left "on the clock" from a previous
+    // day is auto-closed (rejected, zero hours) before the new day begins.
+    await rejectStaleOpenShifts({ locationId: location.id });
 
     const shopDay = await db.query.shopDays.findFirst({
       where: and(eq(shopDays.locationId, location.id), eq(shopDays.date, today)),
@@ -437,6 +494,9 @@ export const openShop = createServerFn({ method: "POST" })
       .insert(shopDays)
       .values({ locationId: data.locationId, date: today, openedBy: actor.memberId })
       .onConflictDoNothing({ target: [shopDays.locationId, shopDays.date] });
+
+    // Same clean-slate sweep as the QR open: no cross-day stragglers.
+    await rejectStaleOpenShifts({ locationId: data.locationId });
 
     const shopDay = await db.query.shopDays.findFirst({
       where: and(eq(shopDays.locationId, data.locationId), eq(shopDays.date, today)),
