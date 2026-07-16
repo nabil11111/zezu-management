@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  EyeOff,
   PackageX,
   PoundSterling,
   Wallet,
@@ -20,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PrintReport, DownloadPdfButton } from "@/components/print-report";
 import { getInsights } from "@/server/insights";
 import { formatGBP, todayDateString } from "@/server/types";
@@ -182,6 +184,18 @@ function InsightsPage() {
 
       <KpiStrip data={data} />
 
+      {!data.salesVisible && !data.salaryVisible ? (
+        <Card className="mt-6">
+          <CardBody>
+            <EmptyState
+              icon={EyeOff}
+              title="Figures hidden"
+              hint="Sales and salary figures are hidden — turn them on in Settings."
+            />
+          </CardBody>
+        </Card>
+      ) : null}
+
       {data.bestDay || data.worstDay ? (
         <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
           {data.bestDay ? (
@@ -205,10 +219,12 @@ function InsightsPage() {
         <SiteBySiteTable data={data} />
       </div>
 
-      <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <WeeklyTrendChart weekly={data.weekly} />
-        <ChannelMixBySite sites={data.sites} />
-      </div>
+      {data.salesVisible ? (
+        <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-2">
+          <WeeklyTrendChart weekly={data.weekly} />
+          <ChannelMixBySite sites={data.sites} />
+        </div>
+      ) : null}
 
       <MonthlyReportPrint data={data} month={month} />
     </div>
@@ -257,31 +273,37 @@ function KpiStrip({ data }: { data: Insights }) {
   const shortfall = data.totals.orders.shortfallItems;
   return (
     <div className="grid grid-cols-2 gap-4 sm:gap-5 xl:grid-cols-4">
-      <StatCard
-        icon={PoundSterling}
-        label="Sales this month"
-        value={formatGBP(data.totals.sales.total)}
-      />
-      <StatCard
-        icon={Clock}
-        label="Labour cost"
-        value={formatGBP(data.totals.labourCost)}
-        sub={
-          <span className="font-mono text-[10px] uppercase text-muted-foreground">
-            {pctLabel(data.totals.labourPct)} of sales
-          </span>
-        }
-      />
-      <StatCard
-        icon={Wallet}
-        label="Outstanding payroll"
-        value={formatGBP(data.payroll.outstandingAmount)}
-        sub={
-          <span className="font-mono text-[10px] uppercase text-muted-foreground">
-            {data.payroll.outstandingHours.toFixed(2)}h all-time, all sites
-          </span>
-        }
-      />
+      {data.salesVisible ? (
+        <StatCard
+          icon={PoundSterling}
+          label="Sales this month"
+          value={formatGBP(data.totals.sales.total)}
+        />
+      ) : null}
+      {data.salaryVisible ? (
+        <StatCard
+          icon={Clock}
+          label="Labour cost"
+          value={formatGBP(data.totals.labourCost)}
+          sub={
+            <span className="font-mono text-[10px] uppercase text-muted-foreground">
+              {pctLabel(data.totals.labourPct)} of sales
+            </span>
+          }
+        />
+      ) : null}
+      {data.salaryVisible ? (
+        <StatCard
+          icon={Wallet}
+          label="Outstanding payroll"
+          value={formatGBP(data.payroll.outstandingAmount)}
+          sub={
+            <span className="font-mono text-[10px] uppercase text-muted-foreground">
+              {data.payroll.outstandingHours.toFixed(2)}h all-time, all sites
+            </span>
+          }
+        />
+      ) : null}
       <StatCard
         icon={shortfall > 0 ? AlertTriangle : PackageX}
         label="Orders short this month"
@@ -317,6 +339,10 @@ function ChannelMiniBar({
 }
 
 function SiteBySiteTable({ data }: { data: Insights }) {
+  const showSales = data.salesVisible;
+  const showLabourCost = data.salaryVisible;
+  const showLabourPct = data.salesVisible && data.salaryVisible;
+
   return (
     <Card>
       <CardHeader>
@@ -327,12 +353,16 @@ function SiteBySiteTable({ data }: { data: Insights }) {
           <thead>
             <tr className="border-b-2 border-foreground/15 text-left font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
               <th className="px-4 py-2.5">Site</th>
-              <th className="px-3 py-2.5 text-right">Sales</th>
-              <th className="px-3 py-2.5">Channel split</th>
-              <th className="px-3 py-2.5 text-right">Days logged</th>
+              {showSales ? (
+                <>
+                  <th className="px-3 py-2.5 text-right">Sales</th>
+                  <th className="px-3 py-2.5">Channel split</th>
+                  <th className="px-3 py-2.5 text-right">Days logged</th>
+                </>
+              ) : null}
               <th className="px-3 py-2.5 text-right">Hours (v/p)</th>
-              <th className="px-3 py-2.5 text-right">Labour £</th>
-              <th className="px-3 py-2.5 text-right">Labour %</th>
+              {showLabourCost ? <th className="px-3 py-2.5 text-right">Labour £</th> : null}
+              {showLabourPct ? <th className="px-3 py-2.5 text-right">Labour %</th> : null}
               <th className="px-3 py-2.5 text-right">Orders (p/r)</th>
               <th className="px-4 py-2.5 text-right">Short</th>
             </tr>
@@ -341,29 +371,37 @@ function SiteBySiteTable({ data }: { data: Insights }) {
             {data.sites.map((s) => (
               <tr key={s.id} className="border-b border-foreground/10 hover:bg-muted/40">
                 <td className="px-4 py-3 font-bold text-foreground">{s.name}</td>
-                <td className="px-3 py-3 text-right font-mono text-xs font-bold text-foreground">
-                  {formatGBP(s.sales.total)}
-                </td>
-                <td className="px-3 py-3">
-                  <ChannelMiniBar
-                    uber={s.sales.uber}
-                    takeaway={s.sales.takeaway}
-                    dineIn={s.sales.dineIn}
-                  />
-                </td>
-                <td className="px-3 py-3 text-right font-mono text-xs text-muted-foreground">
-                  {s.sales.daysLogged}
-                </td>
+                {showSales ? (
+                  <>
+                    <td className="px-3 py-3 text-right font-mono text-xs font-bold text-foreground">
+                      {formatGBP(s.sales.total)}
+                    </td>
+                    <td className="px-3 py-3">
+                      <ChannelMiniBar
+                        uber={s.sales.uber}
+                        takeaway={s.sales.takeaway}
+                        dineIn={s.sales.dineIn}
+                      />
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono text-xs text-muted-foreground">
+                      {s.sales.daysLogged}
+                    </td>
+                  </>
+                ) : null}
                 <td className="px-3 py-3 text-right font-mono text-xs text-foreground">
                   {s.hours.verified.toFixed(1)}
                   <span className="text-muted-foreground">/{s.hours.pending.toFixed(1)}</span>
                 </td>
-                <td className="px-3 py-3 text-right font-mono text-xs text-foreground">
-                  {formatGBP(s.labourCost)}
-                </td>
-                <td className="px-3 py-3 text-right font-mono text-xs text-foreground">
-                  {pctLabel(s.labourPct)}
-                </td>
+                {showLabourCost ? (
+                  <td className="px-3 py-3 text-right font-mono text-xs text-foreground">
+                    {formatGBP(s.labourCost)}
+                  </td>
+                ) : null}
+                {showLabourPct ? (
+                  <td className="px-3 py-3 text-right font-mono text-xs text-foreground">
+                    {pctLabel(s.labourPct)}
+                  </td>
+                ) : null}
                 <td className="px-3 py-3 text-right font-mono text-xs text-foreground">
                   {s.orders.placed}
                   <span className="text-muted-foreground">/{s.orders.received}</span>
@@ -382,31 +420,39 @@ function SiteBySiteTable({ data }: { data: Insights }) {
           <tfoot>
             <tr className="border-t-2 border-foreground/20 font-bold">
               <td className="px-4 py-3 text-foreground">Totals</td>
-              <td className="px-3 py-3 text-right font-mono text-xs text-pop">
-                {formatGBP(data.totals.sales.total)}
-              </td>
-              <td className="px-3 py-3">
-                <ChannelMiniBar
-                  uber={data.totals.sales.uber}
-                  takeaway={data.totals.sales.takeaway}
-                  dineIn={data.totals.sales.dineIn}
-                />
-              </td>
-              <td className="px-3 py-3 text-right font-mono text-xs text-foreground">
-                {data.totals.sales.daysLogged}
-              </td>
+              {showSales ? (
+                <>
+                  <td className="px-3 py-3 text-right font-mono text-xs text-pop">
+                    {formatGBP(data.totals.sales.total)}
+                  </td>
+                  <td className="px-3 py-3">
+                    <ChannelMiniBar
+                      uber={data.totals.sales.uber}
+                      takeaway={data.totals.sales.takeaway}
+                      dineIn={data.totals.sales.dineIn}
+                    />
+                  </td>
+                  <td className="px-3 py-3 text-right font-mono text-xs text-foreground">
+                    {data.totals.sales.daysLogged}
+                  </td>
+                </>
+              ) : null}
               <td className="px-3 py-3 text-right font-mono text-xs text-foreground">
                 {data.totals.hours.verified.toFixed(1)}
                 <span className="font-normal text-muted-foreground">
                   /{data.totals.hours.pending.toFixed(1)}
                 </span>
               </td>
-              <td className="px-3 py-3 text-right font-mono text-xs text-foreground">
-                {formatGBP(data.totals.labourCost)}
-              </td>
-              <td className="px-3 py-3 text-right font-mono text-xs text-foreground">
-                {pctLabel(data.totals.labourPct)}
-              </td>
+              {showLabourCost ? (
+                <td className="px-3 py-3 text-right font-mono text-xs text-foreground">
+                  {formatGBP(data.totals.labourCost)}
+                </td>
+              ) : null}
+              {showLabourPct ? (
+                <td className="px-3 py-3 text-right font-mono text-xs text-foreground">
+                  {pctLabel(data.totals.labourPct)}
+                </td>
+              ) : null}
               <td className="px-3 py-3 text-right font-mono text-xs text-foreground">
                 {data.totals.orders.placed}
                 <span className="font-normal text-muted-foreground">
@@ -561,20 +607,33 @@ function ChannelMixBySite({ sites }: { sites: Insights["sites"] }) {
 // ── PDF export ───────────────────────────────────────────────────────────
 
 function MonthlyReportPrint({ data, month }: { data: Insights; month: string }) {
+  const showSales = data.salesVisible;
+  const showLabourCost = data.salaryVisible;
+  const showLabourPct = data.salesVisible && data.salaryVisible;
+  const bodyBits = [showSales && "sales", "hours", "orders"].filter(Boolean).join(", ");
+  const tailBits = [showSales && "best/worst day", showLabourCost && "payroll owed"].filter(
+    Boolean,
+  );
+  const subtitle =
+    tailBits.length > 0
+      ? `Site by site — ${bodyBits} — plus ${tailBits.join(" and ")}`
+      : `Site by site — ${bodyBits}`;
+
   return (
-    <PrintReport
-      title={`Monthly report — ${monthLabel(month)}`}
-      subtitle="Site by site — sales, labour, orders — plus best/worst day and payroll owed"
-    >
+    <PrintReport title={`Monthly report — ${monthLabel(month)}`} subtitle={subtitle}>
       <table className="w-full border-collapse text-left text-sm">
         <thead>
           <tr className="border-b-2 border-[#1b1510]/20 font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">
             <th className="py-2 pr-4">Site</th>
-            <th className="py-2 pr-4 text-right">Sales</th>
-            <th className="py-2 pr-4 text-right">Days</th>
+            {showSales ? (
+              <>
+                <th className="py-2 pr-4 text-right">Sales</th>
+                <th className="py-2 pr-4 text-right">Days</th>
+              </>
+            ) : null}
             <th className="py-2 pr-4 text-right">Hours verified</th>
-            <th className="py-2 pr-4 text-right">Labour £</th>
-            <th className="py-2 pr-4 text-right">Labour %</th>
+            {showLabourCost ? <th className="py-2 pr-4 text-right">Labour £</th> : null}
+            {showLabourPct ? <th className="py-2 pr-4 text-right">Labour %</th> : null}
             <th className="py-2 pr-4 text-right">Orders placed</th>
             <th className="py-2 pr-4 text-right">Received</th>
             <th className="py-2 text-right">Short</th>
@@ -584,11 +643,19 @@ function MonthlyReportPrint({ data, month }: { data: Insights; month: string }) 
           {data.sites.map((s) => (
             <tr key={s.id} className="border-b border-[#1b1510]/10">
               <td className="py-2 pr-4 font-bold">{s.name}</td>
-              <td className="py-2 pr-4 text-right">{formatGBP(s.sales.total)}</td>
-              <td className="py-2 pr-4 text-right">{s.sales.daysLogged}</td>
+              {showSales ? (
+                <>
+                  <td className="py-2 pr-4 text-right">{formatGBP(s.sales.total)}</td>
+                  <td className="py-2 pr-4 text-right">{s.sales.daysLogged}</td>
+                </>
+              ) : null}
               <td className="py-2 pr-4 text-right">{s.hours.verified.toFixed(2)}</td>
-              <td className="py-2 pr-4 text-right">{formatGBP(s.labourCost)}</td>
-              <td className="py-2 pr-4 text-right">{pctLabel(s.labourPct)}</td>
+              {showLabourCost ? (
+                <td className="py-2 pr-4 text-right">{formatGBP(s.labourCost)}</td>
+              ) : null}
+              {showLabourPct ? (
+                <td className="py-2 pr-4 text-right">{pctLabel(s.labourPct)}</td>
+              ) : null}
               <td className="py-2 pr-4 text-right">{s.orders.placed}</td>
               <td className="py-2 pr-4 text-right">{s.orders.received}</td>
               <td className="py-2 text-right">{s.orders.shortfallItems}</td>
@@ -596,11 +663,19 @@ function MonthlyReportPrint({ data, month }: { data: Insights; month: string }) 
           ))}
           <tr className="border-t-2 border-[#1b1510]/30 font-bold">
             <td className="py-2 pr-4">Totals</td>
-            <td className="py-2 pr-4 text-right">{formatGBP(data.totals.sales.total)}</td>
-            <td className="py-2 pr-4 text-right">{data.totals.sales.daysLogged}</td>
+            {showSales ? (
+              <>
+                <td className="py-2 pr-4 text-right">{formatGBP(data.totals.sales.total)}</td>
+                <td className="py-2 pr-4 text-right">{data.totals.sales.daysLogged}</td>
+              </>
+            ) : null}
             <td className="py-2 pr-4 text-right">{data.totals.hours.verified.toFixed(2)}</td>
-            <td className="py-2 pr-4 text-right">{formatGBP(data.totals.labourCost)}</td>
-            <td className="py-2 pr-4 text-right">{pctLabel(data.totals.labourPct)}</td>
+            {showLabourCost ? (
+              <td className="py-2 pr-4 text-right">{formatGBP(data.totals.labourCost)}</td>
+            ) : null}
+            {showLabourPct ? (
+              <td className="py-2 pr-4 text-right">{pctLabel(data.totals.labourPct)}</td>
+            ) : null}
             <td className="py-2 pr-4 text-right">{data.totals.orders.placed}</td>
             <td className="py-2 pr-4 text-right">{data.totals.orders.received}</td>
             <td className="py-2 text-right">{data.totals.orders.shortfallItems}</td>
@@ -608,35 +683,48 @@ function MonthlyReportPrint({ data, month }: { data: Insights; month: string }) 
         </tbody>
       </table>
 
-      <div className="mt-6 grid grid-cols-2 gap-6 text-sm">
-        <div>
-          <p className="font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">Best day</p>
-          <p className="mt-1 font-bold">
-            {data.bestDay
-              ? `${data.bestDay.siteName} — ${formatShortDate(data.bestDay.date)} — ${formatGBP(data.bestDay.total)}`
-              : "—"}
-          </p>
+      {showSales && (data.bestDay || data.worstDay) ? (
+        <div className="mt-6 grid grid-cols-2 gap-6 text-sm">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">
+              Best day
+            </p>
+            <p className="mt-1 font-bold">
+              {data.bestDay
+                ? `${data.bestDay.siteName} — ${formatShortDate(data.bestDay.date)} — ${formatGBP(data.bestDay.total)}`
+                : "—"}
+            </p>
+          </div>
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">
+              Worst day
+            </p>
+            <p className="mt-1 font-bold">
+              {data.worstDay
+                ? `${data.worstDay.siteName} — ${formatShortDate(data.worstDay.date)} — ${formatGBP(data.worstDay.total)}`
+                : "—"}
+            </p>
+          </div>
         </div>
-        <div>
-          <p className="font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">
-            Worst day
-          </p>
-          <p className="mt-1 font-bold">
-            {data.worstDay
-              ? `${data.worstDay.siteName} — ${formatShortDate(data.worstDay.date)} — ${formatGBP(data.worstDay.total)}`
-              : "—"}
-          </p>
-        </div>
-      </div>
+      ) : null}
 
-      <div className="mt-6 border-t border-[#1b1510]/20 pt-4">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">
-          Payroll owed (all-time, all sites)
+      {showLabourCost ? (
+        <div className="mt-6 border-t border-[#1b1510]/20 pt-4">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">
+            Payroll owed (all-time, all sites)
+          </p>
+          <p className="mt-1 text-lg font-bold">
+            {data.payroll.outstandingHours.toFixed(2)}h ·{" "}
+            {formatGBP(data.payroll.outstandingAmount)}
+          </p>
+        </div>
+      ) : null}
+
+      {!showSales && !showLabourCost ? (
+        <p className="mt-6 border-t border-[#1b1510]/20 pt-4 font-mono text-[10px] uppercase tracking-widest text-[#6e6455]">
+          Sales and salary figures are hidden — turn them on in Settings.
         </p>
-        <p className="mt-1 text-lg font-bold">
-          {data.payroll.outstandingHours.toFixed(2)}h · {formatGBP(data.payroll.outstandingAmount)}
-        </p>
-      </div>
+      ) : null}
     </PrintReport>
   );
 }

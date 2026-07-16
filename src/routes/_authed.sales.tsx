@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
   AlertTriangle,
@@ -48,6 +48,13 @@ const CHANNEL_COLOR: Record<"uber" | "takeaway" | "dineIn", string> = {
 };
 
 export const Route = createFileRoute("/_authed/sales")({
+  // CEO-only, and only once the CEO has switched sales visibility on —
+  // sales figures are hidden from everyone (including the CEO) by default.
+  beforeLoad: ({ context }) => {
+    if (context.actor.role !== "ceo" || !context.flags.salesVisible) {
+      throw redirect({ to: "/" });
+    }
+  },
   // Optional-typed so plain <Link to="/sales"> works; defaults are still
   // always applied here, so both values are present at runtime.
   validateSearch: (s: Record<string, unknown>): { location?: string; days?: WindowDays } => {

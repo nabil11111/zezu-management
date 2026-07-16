@@ -116,8 +116,7 @@ const upsertRotaEntrySchema = z.object({
 export const upsertRotaEntry = createServerFn({ method: "POST" })
   .validator(upsertRotaEntrySchema)
   .handler(async ({ data }) => {
-    const { requireManager, assertLocationAccess } = await import("@/lib/auth.server");
-    const { actor, locationIds } = await requireManager();
+    const { requireCapabilityAtLocation } = await import("@/lib/auth.server");
 
     if (data.endTime <= data.startTime) {
       throw new Error("End must be after start");
@@ -132,11 +131,10 @@ export const upsertRotaEntry = createServerFn({ method: "POST" })
     if (data.id) {
       existing = await db.query.rotaShifts.findFirst({ where: eq(rotaShifts.id, data.id) });
       if (!existing) throw new Error("Shift not found");
-      assertLocationAccess(locationIds, existing.locationId);
       if (existing.locationId !== data.locationId) throw new Error("Location mismatch");
-    } else {
-      assertLocationAccess(locationIds, data.locationId);
     }
+
+    const actor = await requireCapabilityAtLocation("set_rota", data.locationId);
 
     const assignment = await db.query.memberLocations.findFirst({
       where: and(
@@ -204,15 +202,14 @@ export const upsertRotaEntry = createServerFn({ method: "POST" })
 export const deleteRotaEntry = createServerFn({ method: "POST" })
   .validator(z.object({ id: z.string().uuid() }))
   .handler(async ({ data }) => {
-    const { requireManager, assertLocationAccess } = await import("@/lib/auth.server");
-    const { locationIds } = await requireManager();
-
     const { db, rotaShifts, members } = await import("@/db");
     const { eq } = await import("drizzle-orm");
 
     const existing = await db.query.rotaShifts.findFirst({ where: eq(rotaShifts.id, data.id) });
     if (!existing) throw new Error("Shift not found");
-    assertLocationAccess(locationIds, existing.locationId);
+
+    const { requireCapabilityAtLocation } = await import("@/lib/auth.server");
+    await requireCapabilityAtLocation("set_rota", existing.locationId);
 
     const member = await db.query.members.findFirst({ where: eq(members.id, existing.memberId) });
 
@@ -242,9 +239,8 @@ const copyPreviousWeekSchema = z.object({
 export const copyPreviousWeek = createServerFn({ method: "POST" })
   .validator(copyPreviousWeekSchema)
   .handler(async ({ data }) => {
-    const { requireManager, assertLocationAccess } = await import("@/lib/auth.server");
-    const { actor, locationIds } = await requireManager();
-    assertLocationAccess(locationIds, data.locationId);
+    const { requireCapabilityAtLocation } = await import("@/lib/auth.server");
+    const actor = await requireCapabilityAtLocation("set_rota", data.locationId);
 
     const { db, rotaShifts } = await import("@/db");
     const { and, eq, gte, lte } = await import("drizzle-orm");

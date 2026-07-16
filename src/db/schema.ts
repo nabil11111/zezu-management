@@ -44,17 +44,19 @@ export const locationsRelations = relations(locations, ({ many }) => ({
   salesEntries: many(salesEntries),
 }));
 
-// ── members (everyone: CEO, managers, staff) ─────────────────────────────
+// ── members (everyone: CEO, managers, staff, warehouse) ──────────────────
 // No usernames/passwords — one unique 4-digit code each, stored hashed
-// (HMAC-SHA256 keyed with SESSION_SECRET). Role decides what the code opens:
-//   ceo       → everything, every location
-//   manager   → their assigned locations only; opens the shop, verifies shifts
-//   staff     → clock in/out via QR, own shifts/hours, menu & training, stock orders
-//   warehouse → sees every branch's stock orders, dispatches them
+// (HMAC-SHA256 keyed with SESSION_SECRET). Role sets the broad lane; the
+// per-member `permissions` list then decides which shop-floor actions the
+// code actually unlocks (open the shop, log usage, place orders, …):
+//   ceo       → everything, every location (permissions ignored — always all)
+//   manager   → their assigned locations; permissions default to the full set
+//   staff     → clock in/out; only the permissions the CEO ticks on
+//   warehouse → the warehouse catalog + dispatch; no branch shop-floor actions
 export const members = pgTable("members", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
-  // 'ceo' | 'manager' | 'staff'
+  // 'ceo' | 'manager' | 'staff' | 'warehouse'
   role: text("role").notNull().default("staff"),
   codeHash: text("code_hash").notNull().unique(),
   hourlyRate: numeric("hourly_rate"),
@@ -62,6 +64,11 @@ export const members = pgTable("members", {
   startedAt: date("started_at"),
   active: boolean("active").notNull().default(true),
   notes: text("notes"),
+  // Configurable shop-floor capabilities — a JSON array of capability keys
+  // (see MEMBER_CAPABILITIES in server/types). CEO always has all of them.
+  permissions: jsonb("permissions"),
+  // First-login welcome video: set when the member has watched it through.
+  welcomeSeenAt: timestamp("welcome_seen_at", { withTimezone: true }),
   ...timestamps,
 });
 
@@ -199,6 +206,28 @@ export const stockMovesRelations = relations(stockMoves, ({ one }) => ({
   by: one(members, { fields: [stockMoves.byMemberId], references: [members.id] }),
 }));
 
+// ── warehouse_products (the central warehouse's own catalog) ─────────────
+// The warehouse stocks itself: it adds the products it carries and marks
+// each available or not. Branches can only order products that are
+// currently available here.
+export const warehouseProducts = pgTable("warehouse_products", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  unit: text("unit").notNull().default("kg"),
+  // Optional running quantity the warehouse holds (informational).
+  quantity: numeric("quantity"),
+  supplier: text("supplier"),
+  // Off = out of stock: branches can't order it until it's back.
+  available: boolean("available").notNull().default(true),
+  active: boolean("active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  ...timestamps,
+});
+
+export const warehouseProductsRelations = relations(warehouseProducts, ({ many }) => ({
+  orderItems: many(stockOrderItems),
+}));
+
 // ── stock_orders (branch → warehouse → branch verification) ──────────────
 // A branch employee places the day's order; the warehouse sees it, sends
 // the items (adjusting quantities if short); the branch verifies what
@@ -221,6 +250,12 @@ export const stockOrders = pgTable("stock_orders", {
   sentNote: text("sent_note"),
   receivedBy: uuid("received_by").references(() => members.id),
   receivedAt: timestamp("received_at", { withTimezone: true }),
+  // Delivery issue trail: when something arrives short or missing, the shop
+  // records why here, then it's resolved (settled with the warehouse). An
+  // order with a shortfall and no resolvedAt is an OPEN issue.
+  issueReason: text("issue_reason"),
+  issueResolvedAt: timestamp("issue_resolved_at", { withTimezone: true }),
+  issueResolvedBy: uuid("issue_resolved_by").references(() => members.id),
   ...timestamps,
 });
 
@@ -237,9 +272,12 @@ export const stockOrderItems = pgTable("stock_order_items", {
   orderId: uuid("order_id")
     .notNull()
     .references(() => stockOrders.id),
+  // The branch stock line this order tops up (levels update on receipt).
   stockItemId: uuid("stock_item_id")
     .notNull()
     .references(() => stockItems.id),
+  // The warehouse catalog product it was ordered from (new-style orders).
+  warehouseProductId: uuid("warehouse_product_id").references(() => warehouseProducts.id),
   quantityOrdered: numeric("quantity_ordered").notNull(),
   // What the warehouse actually dispatched (null until sent).
   quantitySent: numeric("quantity_sent"),
@@ -256,6 +294,10 @@ export const stockOrderItems = pgTable("stock_order_items", {
 export const stockOrderItemsRelations = relations(stockOrderItems, ({ one }) => ({
   order: one(stockOrders, { fields: [stockOrderItems.orderId], references: [stockOrders.id] }),
   item: one(stockItems, { fields: [stockOrderItems.stockItemId], references: [stockItems.id] }),
+  product: one(warehouseProducts, {
+    fields: [stockOrderItems.warehouseProductId],
+    references: [warehouseProducts.id],
+  }),
 }));
 
 // ── menu_items (BRAND-LEVEL: every location inherits the menu) ───────────

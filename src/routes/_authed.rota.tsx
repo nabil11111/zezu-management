@@ -105,9 +105,9 @@ function memberWeeklyHours(entries: EntryRow[], memberId: string): string {
 
 function RotaPage() {
   const { locations, locationId, weekStart, rota } = Route.useLoaderData();
-  const { actor } = Route.useRouteContext();
+  const { actor, capabilities } = Route.useRouteContext();
   const navigate = Route.useNavigate();
-  const isManager = actor.role === "ceo" || actor.role === "manager";
+  const canEdit = actor.role === "ceo" || capabilities.includes("set_rota");
 
   const currentLocation = locations.find((l) => l.id === locationId);
   const days = rota?.days ?? Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -165,7 +165,7 @@ function RotaPage() {
         />
       ) : (
         <>
-          {isManager ? (
+          {canEdit ? (
             <div className="mb-6 flex justify-end">
               <CopyLastWeekButton locationId={locationId} weekStart={weekStart} />
             </div>
@@ -177,7 +177,7 @@ function RotaPage() {
             entries={rota.entries}
             today={today}
             actor={actor}
-            isManager={isManager}
+            canEdit={canEdit}
             onOpenCell={(memberId, date, entry) =>
               setDialogState({ memberId, date, entry: entry ?? null })
             }
@@ -189,7 +189,7 @@ function RotaPage() {
             entries={rota.entries}
             today={today}
             actor={actor}
-            isManager={isManager}
+            canEdit={canEdit}
             onOpenDay={(date, entry) =>
               setDialogState({ memberId: entry?.memberId ?? null, date, entry: entry ?? null })
             }
@@ -204,7 +204,7 @@ function RotaPage() {
             <RotaPrintTable days={days} crew={rota.crew} entries={rota.entries} />
           </PrintReport>
 
-          {isManager ? (
+          {canEdit ? (
             <ShiftDialog
               state={dialogState}
               crew={rota.crew}
@@ -286,7 +286,7 @@ function DesktopGrid({
   entries,
   today,
   actor,
-  isManager,
+  canEdit,
   onOpenCell,
 }: {
   days: string[];
@@ -294,7 +294,7 @@ function DesktopGrid({
   entries: EntryRow[];
   today: string;
   actor: Actor;
-  isManager: boolean;
+  canEdit: boolean;
   onOpenCell: (memberId: string, date: string, entry?: EntryRow) => void;
 }) {
   return (
@@ -340,7 +340,7 @@ function DesktopGrid({
                   isSelf && "border-l-pop/40",
                 );
 
-                if (isManager && cellEntries.length === 0) {
+                if (canEdit && cellEntries.length === 0) {
                   return (
                     <button
                       key={d}
@@ -358,11 +358,11 @@ function DesktopGrid({
                       <button
                         key={e.id}
                         type="button"
-                        disabled={!isManager}
-                        onClick={() => isManager && onOpenCell(member.id, d, e)}
+                        disabled={!canEdit}
+                        onClick={() => canEdit && onOpenCell(member.id, d, e)}
                         className={cn(
                           "flex items-center gap-1 border border-foreground/25 bg-pop/10 px-1.5 py-1 text-left font-mono text-[10px] font-bold text-foreground",
-                          isManager && "cursor-pointer hover:border-pop",
+                          canEdit && "cursor-pointer hover:border-pop",
                         )}
                       >
                         {e.startTime}–{e.endTime}
@@ -371,7 +371,7 @@ function DesktopGrid({
                         ) : null}
                       </button>
                     ))}
-                    {isManager ? (
+                    {canEdit ? (
                       <button
                         type="button"
                         onClick={() => onOpenCell(member.id, d)}
@@ -400,7 +400,7 @@ function MobileList({
   entries,
   today,
   actor,
-  isManager,
+  canEdit,
   onOpenDay,
 }: {
   days: string[];
@@ -408,7 +408,7 @@ function MobileList({
   entries: EntryRow[];
   today: string;
   actor: Actor;
-  isManager: boolean;
+  canEdit: boolean;
   onOpenDay: (date: string, entry?: EntryRow) => void;
 }) {
   const memberName = new Map(crew.map((m) => [m.id, m.name]));
@@ -425,7 +425,7 @@ function MobileList({
               <CardTitle>
                 {dayLabel(d, { weekday: "long", day: "numeric", month: "short" })}
               </CardTitle>
-              {isManager ? (
+              {canEdit ? (
                 <Button size="sm" variant="outline" onClick={() => onOpenDay(d)}>
                   <Plus /> Add
                 </Button>
@@ -441,12 +441,12 @@ function MobileList({
                     <button
                       key={e.id}
                       type="button"
-                      disabled={!isManager}
-                      onClick={() => isManager && onOpenDay(d, e)}
+                      disabled={!canEdit}
+                      onClick={() => canEdit && onOpenDay(d, e)}
                       className={cn(
                         "flex items-center justify-between gap-2 border-b border-foreground/10 px-4 py-3 text-left text-sm last:border-b-0",
                         isSelf && "bg-pop/5",
-                        isManager && "cursor-pointer hover:bg-foreground/5",
+                        canEdit && "cursor-pointer hover:bg-foreground/5",
                       )}
                     >
                       <span className="text-foreground">

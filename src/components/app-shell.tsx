@@ -31,20 +31,55 @@ import { cn } from "@/lib/utils";
  *   staff     → their own shifts, stock orders, the menu (training videos)
  *   warehouse → every branch's stock orders, to dispatch them
  */
-const NAV = [
+/**
+ * A nav item shows when: its `flag` (if any) is on, AND either the actor is
+ * CEO, or the actor's role is in `roles`, or the actor holds one of `anyCap`.
+ * That's what makes access configurable per-employee — a staff member ticked
+ * with `place_orders` gets Orders; without it, they don't.
+ */
+type NavItem = {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  exact?: boolean;
+  roles?: string[];
+  anyCap?: string[];
+  flag?: "salesVisible";
+};
+
+const NAV: NavItem[] = [
   { to: "/", label: "Live", icon: LayoutDashboard, exact: true, roles: ["ceo", "manager"] },
   { to: "/insights", label: "Insights", icon: BarChart3, roles: ["ceo"] },
-  { to: "/sales", label: "Sales", icon: PoundSterling, roles: ["ceo", "manager"] },
-  { to: "/stock", label: "Stock", icon: Package, roles: ["ceo", "manager"] },
-  { to: "/orders", label: "Orders", icon: PackageCheck, roles: ["ceo", "manager", "staff"] },
+  { to: "/sales", label: "Sales", icon: PoundSterling, roles: ["ceo"], flag: "salesVisible" },
+  {
+    to: "/stock",
+    label: "Stock",
+    icon: Package,
+    roles: ["ceo"],
+    anyCap: ["log_usage", "manage_stock"],
+  },
+  { to: "/orders", label: "Orders", icon: PackageCheck, roles: ["ceo"], anyCap: ["place_orders"] },
   { to: "/warehouse", label: "Warehouse", icon: Truck, roles: ["ceo", "warehouse"] },
   { to: "/menu", label: "Menu", icon: UtensilsCrossed, roles: ["ceo", "manager", "staff"] },
   { to: "/people", label: "People", icon: UserRound, roles: ["ceo", "manager"] },
   { to: "/rota", label: "Rota", icon: CalendarDays, roles: ["ceo", "manager", "staff"] },
-  { to: "/shifts", label: "Shifts", icon: Clock, roles: ["ceo", "manager"] },
-  { to: "/my", label: "My Shifts", icon: Clock, roles: ["staff", "warehouse"] },
+  { to: "/shifts", label: "Shifts", icon: Clock, roles: ["ceo"], anyCap: ["verify_shifts"] },
+  { to: "/my", label: "My Shifts", icon: Clock, roles: ["staff"] },
   { to: "/settings", label: "Settings", icon: Settings, roles: ["ceo"] },
-] as const;
+];
+
+export interface ShellSession {
+  capabilities: string[];
+  flags: { salesVisible: boolean; salaryVisible: boolean };
+}
+
+function navVisible(item: NavItem, role: string, session: ShellSession): boolean {
+  if (item.flag && !session.flags[item.flag]) return false;
+  if (role === "ceo") return true;
+  if (item.roles?.includes(role)) return true;
+  if (item.anyCap?.some((c) => session.capabilities.includes(c))) return true;
+  return false;
+}
 
 const ROLE_LABEL: Record<Actor["role"], string> = {
   ceo: "CEO",
@@ -90,12 +125,20 @@ function ThemeToggle() {
   );
 }
 
-function NavLinks({ role, onNavigate }: { role: Actor["role"]; onNavigate?: () => void }) {
+function NavLinks({
+  role,
+  session,
+  onNavigate,
+}: {
+  role: Actor["role"];
+  session: ShellSession;
+  onNavigate?: () => void;
+}) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   return (
     <nav className="flex flex-col gap-1">
-      {NAV.filter((item) => (item.roles as readonly string[]).includes(role)).map(
+      {NAV.filter((item) => navVisible(item, role, session)).map(
         ({ to, label, icon: Icon, ...rest }) => {
           const exact = "exact" in rest && rest.exact;
           const active = exact ? pathname === to : pathname.startsWith(to);
@@ -138,8 +181,19 @@ function LogoutButton() {
   );
 }
 
-export function AppShell({ actor, children }: { actor: Actor; children: React.ReactNode }) {
+export function AppShell({
+  actor,
+  capabilities,
+  flags,
+  children,
+}: {
+  actor: Actor;
+  capabilities: string[];
+  flags: { salesVisible: boolean; salaryVisible: boolean };
+  children: React.ReactNode;
+}) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const session: ShellSession = { capabilities, flags };
 
   const identity = (
     <div className="border-t-2 border-foreground/15 px-3 py-3">
@@ -161,7 +215,7 @@ export function AppShell({ actor, children }: { actor: Actor; children: React.Re
           </span>
         </Link>
         <div className="flex flex-1 flex-col justify-between overflow-y-auto p-3">
-          <NavLinks role={actor.role} />
+          <NavLinks role={actor.role} session={session} />
           <div>
             {identity}
             <ThemeToggle />
@@ -192,7 +246,7 @@ export function AppShell({ actor, children }: { actor: Actor; children: React.Re
       {mobileOpen && (
         <div className="fixed inset-0 z-30 bg-background pt-16 lg:hidden">
           <div className="flex h-full flex-col justify-between p-4">
-            <NavLinks role={actor.role} onNavigate={() => setMobileOpen(false)} />
+            <NavLinks role={actor.role} session={session} onNavigate={() => setMobileOpen(false)} />
             <div>
               {identity}
               <ThemeToggle />

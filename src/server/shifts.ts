@@ -73,13 +73,19 @@ async function rejectStaleOpenShifts(filter: {
   return stale.length;
 }
 
-/** CEO always may; a manager may only for a location they're assigned to. */
+/**
+ * CEO always may. Otherwise the member must hold the "open_shop" capability
+ * (managers get it by default; a staff member may be granted it) AND be
+ * assigned to this location.
+ */
 async function canOpenShop(
-  member: { id: string; role: string },
+  member: { id: string; role: string; permissions?: unknown },
   locationId: string,
 ): Promise<boolean> {
   if (member.role === "ceo") return true;
-  if (member.role !== "manager") return false;
+
+  const { memberHasCapability } = await import("@/server/types");
+  if (!memberHasCapability(member.role, member.permissions, "open_shop")) return false;
 
   const { db, memberLocations } = await import("@/db");
   const { and, eq } = await import("drizzle-orm");
@@ -92,14 +98,17 @@ async function canOpenShop(
 
 /** Shared verify/reject logic — a still-open shift can't be judged either way. */
 async function setShiftStatus(id: string, status: "verified" | "rejected") {
-  const { requireManager, assertLocationAccess } = await import("@/lib/auth.server");
-  const { actor, locationIds } = await requireManager();
+  const { requireCapability, getActorLocationIds, assertLocationAccess } =
+    await import("@/lib/auth.server");
+  const actor = await requireCapability("verify_shifts");
 
   const { db, shifts } = await import("@/db");
   const { eq } = await import("drizzle-orm");
 
   const shift = await db.query.shifts.findFirst({ where: eq(shifts.id, id) });
   if (!shift) throw new Error("Shift not found");
+
+  const locationIds = await getActorLocationIds(actor);
   assertLocationAccess(locationIds, shift.locationId);
   if (!shift.clockOutAt) throw new Error("Still on shift");
 
@@ -368,8 +377,13 @@ export const getShiftBoard = createServerFn({ method: "GET" })
       .optional(),
   )
   .handler(async ({ data }) => {
-    const { requireManager, assertLocationAccess } = await import("@/lib/auth.server");
-    const { locationIds } = await requireManager();
+    // Anyone who can reach the /shifts page holds verify_shifts (nav gates on
+    // it); this board is what they land on, so it's gated the same way
+    // rather than manager-only.
+    const { requireCapability, getActorLocationIds, assertLocationAccess } =
+      await import("@/lib/auth.server");
+    const actor = await requireCapability("verify_shifts");
+    const locationIds = await getActorLocationIds(actor);
 
     if (data?.locationId) {
       assertLocationAccess(locationIds, data.locationId);
@@ -476,9 +490,8 @@ export const rejectShift = createServerFn({ method: "POST" })
 export const openShop = createServerFn({ method: "POST" })
   .validator(z.object({ locationId: z.string().uuid() }))
   .handler(async ({ data }) => {
-    const { requireManager, assertLocationAccess } = await import("@/lib/auth.server");
-    const { actor, locationIds } = await requireManager();
-    assertLocationAccess(locationIds, data.locationId);
+    const { requireCapabilityAtLocation } = await import("@/lib/auth.server");
+    const actor = await requireCapabilityAtLocation("open_shop", data.locationId);
 
     const { db, shopDays, locations, members } = await import("@/db");
     const { and, eq } = await import("drizzle-orm");
@@ -525,9 +538,8 @@ export const openShop = createServerFn({ method: "POST" })
 export const closeShop = createServerFn({ method: "POST" })
   .validator(z.object({ locationId: z.string().uuid() }))
   .handler(async ({ data }) => {
-    const { requireManager, assertLocationAccess } = await import("@/lib/auth.server");
-    const { actor, locationIds } = await requireManager();
-    assertLocationAccess(locationIds, data.locationId);
+    const { requireCapabilityAtLocation } = await import("@/lib/auth.server");
+    const actor = await requireCapabilityAtLocation("open_shop", data.locationId);
 
     const { db, shopDays, locations, members, shifts } = await import("@/db");
     const { and, eq, isNull, inArray } = await import("drizzle-orm");

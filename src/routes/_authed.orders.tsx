@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, Minus, Plus, PackageCheck, Sparkles, Truck } from "lucide-react";
+import { Check, Minus, Plus, PackageCheck, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app-shell";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +23,8 @@ import {
   placeOrder,
   cancelOrder,
   confirmReceipt,
+  reportOrderIssue,
+  resolveOrderIssue,
   setItemUnloaded,
 } from "@/server/orders";
 import { ORDER_STATUS_LABEL, type OrderStatus } from "@/server/types";
@@ -55,13 +57,27 @@ export const Route = createFileRoute("/_authed/orders")({
 });
 
 type Board = Awaited<ReturnType<typeof getOrderBoard>>;
-type BoardItem = Board["items"][number];
+type CatalogProduct = Board["catalog"][number];
 type OrderRow = Board["orders"][number];
 type LocationRow = Awaited<ReturnType<typeof listLocations>>[number];
 
 /** Trims floating-point noise for display: 2.50 → "2.5", 3.00 → "3". */
 function formatQty(n: number): string {
   return Number(n.toFixed(2)).toString();
+}
+
+/** An order has a shortfall when the warehouse sent less than ordered, or
+ * the branch received less than was sent. */
+function orderHasShortfall(order: OrderRow): boolean {
+  return order.items.some((i) => {
+    const sentShort =
+      (order.status === "sent" || order.status === "received") &&
+      (i.quantitySent ?? i.quantityOrdered) < i.quantityOrdered;
+    const receivedShort =
+      order.status === "received" &&
+      (i.quantityReceived ?? 0) < (i.quantitySent ?? i.quantityOrdered);
+    return sentShort || receivedShort;
+  });
 }
 
 function formatDateTime(iso: string): string {
@@ -91,7 +107,9 @@ function OrderStatusBadge({ status }: { status: OrderStatus }) {
 
 function OrdersPage() {
   const { locations, locationId, board } = Route.useLoaderData();
+  const { actor, capabilities } = Route.useRouteContext();
   const navigate = Route.useNavigate();
+  const canPlaceOrders = actor.role === "ceo" || capabilities.includes("place_orders");
 
   function selectLocation(id: string) {
     navigate({ search: (prev) => ({ ...prev, location: id }) });
@@ -121,7 +139,18 @@ function OrdersPage() {
         />
       ) : (
         <>
-          <PlaceOrderCard locationId={locationId} items={board.items} />
+          {canPlaceOrders ? (
+            <PlaceOrderCard locationId={locationId} catalog={board.catalog} />
+          ) : (
+            <Card raised>
+              <CardBody>
+                <p className="text-sm text-muted-foreground">
+                  You don't have permission to place orders — ask a manager to enable it on your
+                  code.
+                </p>
+              </CardBody>
+            </Card>
+          )}
           <OrderHistoryCard locationId={locationId} orders={board.orders} />
         </>
       )}
@@ -158,17 +187,22 @@ function LocationPicker({
 
 const QUICK_AMOUNTS = [0.5, 1, 2, 5, 10];
 
-function PlaceOrderCard({ locationId, items }: { locationId: string; items: BoardItem[] }) {
+function PlaceOrderCard({
+  locationId,
+  catalog,
+}: {
+  locationId: string;
+  catalog: CatalogProduct[];
+}) {
   const router = useRouter();
   const placeOrderFn = useServerFn(placeOrder);
   const [staged, setStaged] = useState<Record<string, number>>({});
-  const [openItem, setOpenItem] = useState<BoardItem | null>(null);
+  const [openProduct, setOpenProduct] = useState<CatalogProduct | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
   const stagedEntries = Object.entries(staged).filter(([, q]) => q > 0);
   const stagedCount = stagedEntries.length;
-  const lowItems = items.filter((i) => i.isLow && i.suggestedQty > 0);
 
   function stage(id: string, qty: number) {
     setStaged((s) => {
@@ -179,16 +213,6 @@ function PlaceOrderCard({ locationId, items }: { locationId: string; items: Boar
     });
   }
 
-  function prefillLowStock() {
-    if (lowItems.length === 0) return;
-    setStaged((s) => {
-      const next = { ...s };
-      for (const item of lowItems) next[item.id] = item.suggestedQty;
-      return next;
-    });
-    toast.success(`Staged ${lowItems.length} low item${lowItems.length === 1 ? "" : "s"}`);
-  }
-
   async function submit() {
     if (stagedEntries.length === 0) return;
     setBusy(true);
@@ -197,7 +221,10 @@ function PlaceOrderCard({ locationId, items }: { locationId: string; items: Boar
         data: {
           locationId,
           note: note.trim() || undefined,
-          items: stagedEntries.map(([stockItemId, quantity]) => ({ stockItemId, quantity })),
+          items: stagedEntries.map(([warehouseProductId, quantity]) => ({
+            warehouseProductId,
+            quantity,
+          })),
         },
       });
       toast.success(`Order sent — ${stagedCount} item${stagedCount === 1 ? "" : "s"}`);
@@ -215,32 +242,24 @@ function PlaceOrderCard({ locationId, items }: { locationId: string; items: Boar
     <Card raised>
       <CardHeader>
         <CardTitle>Place today's order</CardTitle>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={lowItems.length === 0}
-          onClick={prefillLowStock}
-        >
-          <Sparkles /> Prefill low stock
-        </Button>
       </CardHeader>
       <CardBody>
-        {items.length === 0 ? (
+        {catalog.length === 0 ? (
           <EmptyState
             icon={PackageCheck}
-            title="No active items"
-            hint="Ask a manager to add stock items before ordering."
+            title="Nothing to order yet"
+            hint="The warehouse hasn't listed any products yet."
           />
         ) : (
           <>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-              {items.map((item) => {
-                const qty = staged[item.id];
+              {catalog.map((product) => {
+                const qty = staged[product.id];
                 return (
                   <button
-                    key={item.id}
+                    key={product.id}
                     type="button"
-                    onClick={() => setOpenItem(item)}
+                    onClick={() => setOpenProduct(product)}
                     className={cn(
                       "flex cursor-pointer flex-col items-start gap-1.5 border-2 px-3 py-3 text-left transition-all",
                       qty
@@ -248,27 +267,15 @@ function PlaceOrderCard({ locationId, items }: { locationId: string; items: Boar
                         : "border-foreground/20 hover:border-foreground/50",
                     )}
                   >
-                    <div className="flex w-full items-center justify-between gap-2">
-                      <span className="truncate text-sm font-bold text-foreground">
-                        {item.name}
-                      </span>
-                      {item.isLow ? (
-                        <Badge tone="outline" className="shrink-0 border-gold text-gold">
-                          Low
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <span className="font-mono text-[10px] text-muted-foreground">
-                      {formatQty(item.level)} {item.unit} on hand
+                    <span className="truncate text-sm font-bold text-foreground">
+                      {product.name}
                     </span>
-                    {item.isLow && item.suggestedQty > 0 ? (
-                      <span className="font-mono text-[10px] text-gold">
-                        Suggest {formatQty(item.suggestedQty)} {item.unit}
-                      </span>
-                    ) : null}
+                    <span className="font-mono text-[10px] text-muted-foreground">
+                      {product.unit} · from the warehouse
+                    </span>
                     {qty ? (
                       <span className="font-mono text-xs font-bold text-destructive">
-                        {formatQty(qty)} {item.unit} staged
+                        {formatQty(qty)} {product.unit} staged
                       </span>
                     ) : null}
                   </button>
@@ -297,12 +304,12 @@ function PlaceOrderCard({ locationId, items }: { locationId: string; items: Boar
       </CardBody>
 
       <OrderQtyDialog
-        item={openItem}
-        initialQty={openItem ? (staged[openItem.id] ?? 0) : 0}
-        onOpenChange={(open) => !open && setOpenItem(null)}
+        product={openProduct}
+        initialQty={openProduct ? (staged[openProduct.id] ?? 0) : 0}
+        onOpenChange={(open) => !open && setOpenProduct(null)}
         onStage={(qty) => {
-          if (openItem) stage(openItem.id, qty);
-          setOpenItem(null);
+          if (openProduct) stage(openProduct.id, qty);
+          setOpenProduct(null);
         }}
       />
     </Card>
@@ -310,12 +317,12 @@ function PlaceOrderCard({ locationId, items }: { locationId: string; items: Boar
 }
 
 function OrderQtyDialog({
-  item,
+  product,
   initialQty,
   onOpenChange,
   onStage,
 }: {
-  item: BoardItem | null;
+  product: CatalogProduct | null;
   initialQty: number;
   onOpenChange: (open: boolean) => void;
   onStage: (qty: number) => void;
@@ -324,16 +331,20 @@ function OrderQtyDialog({
 
   useEffect(() => {
     setQty(initialQty > 0 ? String(initialQty) : "");
-  }, [item, initialQty]);
+  }, [product, initialQty]);
 
   const numericQty = Number(qty);
   const step = (delta: number) => setQty((q) => String(Math.max(0, (Number(q) || 0) + delta)));
 
   return (
-    <Dialog open={item !== null} onOpenChange={onOpenChange}>
+    <Dialog open={product !== null} onOpenChange={onOpenChange}>
       <DialogContent
-        title={item?.name ?? "Quantity"}
-        description={item ? `${formatQty(item.level)} ${item.unit} on hand` : undefined}
+        title={product?.name ?? "Quantity"}
+        description={
+          product
+            ? `From the warehouse${product.supplier ? ` · ${product.supplier}` : ""}`
+            : undefined
+        }
       >
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-center gap-3">
@@ -363,7 +374,7 @@ function OrderQtyDialog({
                 size="sm"
                 onClick={() => setQty(String(q))}
               >
-                {q} {item?.unit}
+                {q} {product?.unit}
               </Button>
             ))}
           </div>
@@ -419,7 +430,10 @@ function OrderHistoryCard({ locationId, orders }: { locationId: string; orders: 
                   {order.items.length} item{order.items.length === 1 ? "" : "s"}
                 </p>
               </div>
-              <OrderStatusBadge status={order.status} />
+              <div className="flex shrink-0 items-center gap-2">
+                {orderHasShortfall(order) ? <Badge tone="danger">Shortfall</Badge> : null}
+                <OrderStatusBadge status={order.status} />
+              </div>
             </button>
           ))
         )}
@@ -706,6 +720,8 @@ function OrderDetailDialog({
             </p>
           ) : null}
 
+          {order && orderHasShortfall(order) ? <IssuePanel order={order} /> : null}
+
           {order?.status === "placed" ? (
             <Button variant="destructive" disabled={busy} onClick={doCancel}>
               Cancel order
@@ -725,5 +741,83 @@ function OrderDetailDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Delivery-issue reason + resolution, shown once an order has a shortfall. */
+function IssuePanel({ order }: { order: OrderRow }) {
+  const router = useRouter();
+  const reportFn = useServerFn(reportOrderIssue);
+  const resolveFn = useServerFn(resolveOrderIssue);
+  const [reason, setReason] = useState(order.issueReason ?? "");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  if (order.issueResolvedAt) {
+    return (
+      <div className="flex flex-col gap-1 border-t-2 border-foreground/15 pt-4">
+        <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          Resolved by {order.issueResolvedByName ?? "Unknown"}
+        </p>
+        {order.issueReason ? (
+          <p className="text-sm text-muted-foreground">{order.issueReason}</p>
+        ) : null}
+      </div>
+    );
+  }
+
+  async function logReason() {
+    const trimmed = reason.trim();
+    if (!trimmed) {
+      toast.error("Add a reason");
+      return;
+    }
+    setBusy(true);
+    try {
+      await reportFn({ data: { orderId: order.id, reason: trimmed } });
+      toast.success("Reason logged");
+      router.invalidate();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't log the reason");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function markResolved() {
+    setBusy(true);
+    try {
+      await resolveFn({ data: { orderId: order.id, note: note.trim() || undefined } });
+      toast.success("Marked resolved");
+      setNote("");
+      router.invalidate();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't mark resolved");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3 border-t-2 border-foreground/15 pt-4">
+      <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-destructive">
+        Delivery issue
+      </p>
+      <Field label="Reason">
+        <Textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="What went wrong?"
+        />
+      </Field>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" disabled={busy} onClick={logReason}>
+          Log reason
+        </Button>
+        <Button size="sm" variant="destructive" disabled={busy} onClick={markResolved}>
+          Mark resolved
+        </Button>
+      </div>
+    </div>
   );
 }

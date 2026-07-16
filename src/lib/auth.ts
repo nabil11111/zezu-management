@@ -86,3 +86,31 @@ export async function requireActorOrRedirect(): Promise<Actor> {
     throw redirect({ to: "/login" });
   }
 }
+
+/** Everything the signed-in shell needs (actor, capabilities, visibility
+ * flags, welcome state) in one call. */
+export const bootstrapSession = createServerFn({ method: "GET" }).handler(async () => {
+  const { getSessionBootstrap } = await import("@/lib/auth.server");
+  return await getSessionBootstrap();
+});
+
+export type SessionBootstrap = Awaited<ReturnType<typeof bootstrapSession>>;
+
+/** `_authed` layout guard: loads the full bootstrap or bounces to /login. */
+export async function loadBootstrapOrRedirect(): Promise<SessionBootstrap> {
+  try {
+    return await bootstrapSession();
+  } catch {
+    throw redirect({ to: "/login" });
+  }
+}
+
+/** Marks the welcome video watched for the current member. */
+export const markWelcomeSeen = createServerFn({ method: "POST" }).handler(async () => {
+  const { requireAuth } = await import("@/lib/auth.server");
+  const actor = await requireAuth();
+  const { db, members } = await import("@/db");
+  const { eq } = await import("drizzle-orm");
+  await db.update(members).set({ welcomeSeenAt: new Date() }).where(eq(members.id, actor.memberId));
+  return { success: true as const };
+});

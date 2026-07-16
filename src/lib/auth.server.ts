@@ -203,6 +203,102 @@ export async function requireCeo(): Promise<Actor> {
   return actor;
 }
 
+/** The capability keys this actor currently holds. CEO → every capability. */
+export async function getActorCapabilities(actor: Actor): Promise<string[]> {
+  const { MEMBER_CAPABILITIES } = await import("@/server/types");
+  if (actor.role === "ceo") return [...MEMBER_CAPABILITIES];
+  const { db, members } = await import("@/db");
+  const { eq } = await import("drizzle-orm");
+  const row = await db.query.members.findFirst({
+    where: eq(members.id, actor.memberId),
+    columns: { permissions: true },
+  });
+  const perms = row?.permissions;
+  return Array.isArray(perms) ? (perms as string[]) : [];
+}
+
+/**
+ * Gate a shop-floor action on a configured capability (see MEMBER_CAPABILITIES).
+ * CEO always passes. Everyone else must have the capability ticked on their
+ * profile. Throws "Not allowed" otherwise.
+ */
+export async function requireCapability(capability: string): Promise<Actor> {
+  const actor = await requireAuth();
+  if (actor.role === "ceo") return actor;
+  const caps = await getActorCapabilities(actor);
+  if (!caps.includes(capability)) {
+    throw new Error("Not allowed");
+  }
+  return actor;
+}
+
+/** requireCapability + the location must be one the actor is assigned to. */
+export async function requireCapabilityAtLocation(
+  capability: string,
+  locationId: string,
+): Promise<Actor> {
+  const actor = await requireCapability(capability);
+  if (actor.role === "ceo") return actor;
+  const locationIds = await getActorLocationIds(actor);
+  assertLocationAccess(locationIds, locationId);
+  return actor;
+}
+
+/**
+ * Everything the signed-in shell needs in one round-trip: the actor, their
+ * capabilities, the CEO-controlled sales/salary visibility flags, and the
+ * first-login welcome-video state. Loaded once in the `_authed` layout and
+ * put on route context so nav and pages can read it without re-querying.
+ */
+export async function getSessionBootstrap(): Promise<{
+  actor: Actor;
+  capabilities: string[];
+  flags: { salesVisible: boolean; salaryVisible: boolean };
+  welcome: { videoUrl: string | null; needsToWatch: boolean };
+}> {
+  const actor = await requireAuth();
+  const { db, members, settings } = await import("@/db");
+  const { eq, inArray } = await import("drizzle-orm");
+
+  const [memberRow, settingRows] = await Promise.all([
+    db.query.members.findFirst({
+      where: eq(members.id, actor.memberId),
+      columns: { permissions: true, welcomeSeenAt: true },
+    }),
+    db
+      .select({ key: settings.key, value: settings.value })
+      .from(settings)
+      .where(inArray(settings.key, ["sales_visible", "salary_visible", "welcome_video_url"])),
+  ]);
+
+  const settingMap = new Map(settingRows.map((r) => [r.key, r.value]));
+  const asBool = (v: unknown) => v === true || v === "true";
+  const asStr = (v: unknown) => (typeof v === "string" && v.length > 0 ? v : null);
+
+  const { MEMBER_CAPABILITIES } = await import("@/server/types");
+  const capabilities =
+    actor.role === "ceo"
+      ? [...MEMBER_CAPABILITIES]
+      : Array.isArray(memberRow?.permissions)
+        ? (memberRow!.permissions as string[])
+        : [];
+
+  const videoUrl = asStr(settingMap.get("welcome_video_url"));
+  // CEO and warehouse skip the crew welcome; everyone else watches once.
+  const skipsWelcome = actor.role === "ceo" || actor.role === "warehouse";
+  const needsToWatch = !!videoUrl && !skipsWelcome && !memberRow?.welcomeSeenAt;
+
+  return {
+    actor,
+    capabilities,
+    flags: {
+      salesVisible: asBool(settingMap.get("sales_visible")),
+      salaryVisible: asBool(settingMap.get("salary_visible")),
+    },
+    welcome: { videoUrl, needsToWatch },
+  };
+}
+
 /** Throws unless the actor controls the given location. */
 export function assertLocationAccess(locationIds: "all" | string[], locationId: string): void {
   if (locationIds !== "all" && !locationIds.includes(locationId)) {

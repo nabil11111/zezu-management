@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Check, X, Store, Clock as ClockIcon } from "lucide-react";
@@ -21,6 +21,11 @@ import { PrintReport, DownloadPdfButton } from "@/components/print-report";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authed/shifts")({
+  beforeLoad: ({ context }) => {
+    if (context.actor.role !== "ceo" && !context.capabilities.includes("verify_shifts")) {
+      throw redirect({ to: "/" });
+    }
+  },
   loader: async () => ({ board: await getShiftBoard({ data: {} }) }),
   component: ShiftsPage,
 });
@@ -48,6 +53,8 @@ function formatDate(iso: string) {
 
 function ShiftsPage() {
   const { board } = Route.useLoaderData();
+  const { actor, capabilities } = Route.useRouteContext();
+  const canOpenShop = actor.role === "ceo" || capabilities.includes("open_shop");
   const [locationFilter, setLocationFilter] = useState<string>("all");
 
   const filteredRecent =
@@ -80,7 +87,7 @@ function ShiftsPage() {
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
           {board.shopToday.map((s) => (
-            <ShopDayCard key={s.locationId} shop={s} />
+            <ShopDayCard key={s.locationId} shop={s} canOpenShop={canOpenShop} />
           ))}
         </div>
       )}
@@ -208,7 +215,7 @@ function ShiftsPage() {
   );
 }
 
-function ShopDayCard({ shop }: { shop: ShopTodayEntry }) {
+function ShopDayCard({ shop, canOpenShop }: { shop: ShopTodayEntry; canOpenShop: boolean }) {
   const router = useRouter();
   const openFn = useServerFn(openShop);
   const closeFn = useServerFn(closeShop);
@@ -275,33 +282,35 @@ function ShopDayCard({ shop }: { shop: ShopTodayEntry }) {
         )}
 
         {isOpen ? (
-          <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-            <DialogTrigger asChild>
-              <Button variant="destructive" size="sm">
-                Close shop
-              </Button>
-            </DialogTrigger>
-            <DialogContent
-              title="Close the shop?"
-              description={`This ends ${shop.locationName}'s day. Closing clocks everyone out — anyone still on the clock is clocked out automatically.`}
-            >
-              <div className="flex justify-end gap-3">
-                <DialogClose asChild>
-                  <Button variant="outline" size="sm">
-                    Cancel
-                  </Button>
-                </DialogClose>
-                <Button variant="destructive" size="sm" onClick={handleClose} disabled={busy}>
-                  {busy ? "Closing…" : "Close shop"}
+          canOpenShop ? (
+            <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+              <DialogTrigger asChild>
+                <Button variant="destructive" size="sm">
+                  Close shop
                 </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        ) : (
+              </DialogTrigger>
+              <DialogContent
+                title="Close the shop?"
+                description={`This ends ${shop.locationName}'s day. Closing clocks everyone out — anyone still on the clock is clocked out automatically.`}
+              >
+                <div className="flex justify-end gap-3">
+                  <DialogClose asChild>
+                    <Button variant="outline" size="sm">
+                      Cancel
+                    </Button>
+                  </DialogClose>
+                  <Button variant="destructive" size="sm" onClick={handleClose} disabled={busy}>
+                    {busy ? "Closing…" : "Close shop"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          ) : null
+        ) : canOpenShop ? (
           <Button size="sm" onClick={handleOpen} disabled={busy}>
             {busy ? "Opening…" : "Open shop"}
           </Button>
-        )}
+        ) : null}
       </CardBody>
     </Card>
   );

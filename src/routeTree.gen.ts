@@ -13,6 +13,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as AuthedIndexRouteImport } from './routes/_authed.index'
 import { Route as ClockQrTokenRouteImport } from './routes/clock.$qrToken'
+import { Route as AuthedWelcomeRouteImport } from './routes/_authed.welcome'
 import { Route as AuthedWarehouseRouteImport } from './routes/_authed.warehouse'
 import { Route as AuthedStockRouteImport } from './routes/_authed.stock'
 import { Route as AuthedShiftsRouteImport } from './routes/_authed.shifts'
@@ -44,6 +45,11 @@ const ClockQrTokenRoute = ClockQrTokenRouteImport.update({
   id: '/clock/$qrToken',
   path: '/clock/$qrToken',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthedWelcomeRoute = AuthedWelcomeRouteImport.update({
+  id: '/welcome',
+  path: '/welcome',
+  getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedWarehouseRoute = AuthedWarehouseRouteImport.update({
   id: '/warehouse',
@@ -119,6 +125,7 @@ export interface FileRoutesByFullPath {
   '/shifts': typeof AuthedShiftsRoute
   '/stock': typeof AuthedStockRoute
   '/warehouse': typeof AuthedWarehouseRoute
+  '/welcome': typeof AuthedWelcomeRoute
   '/clock/$qrToken': typeof ClockQrTokenRoute
   '/people/$memberId': typeof AuthedPeopleMemberIdRoute
   '/people/': typeof AuthedPeopleIndexRoute
@@ -135,6 +142,7 @@ export interface FileRoutesByTo {
   '/shifts': typeof AuthedShiftsRoute
   '/stock': typeof AuthedStockRoute
   '/warehouse': typeof AuthedWarehouseRoute
+  '/welcome': typeof AuthedWelcomeRoute
   '/clock/$qrToken': typeof ClockQrTokenRoute
   '/': typeof AuthedIndexRoute
   '/people/$memberId': typeof AuthedPeopleMemberIdRoute
@@ -154,6 +162,7 @@ export interface FileRoutesById {
   '/_authed/shifts': typeof AuthedShiftsRoute
   '/_authed/stock': typeof AuthedStockRoute
   '/_authed/warehouse': typeof AuthedWarehouseRoute
+  '/_authed/welcome': typeof AuthedWelcomeRoute
   '/clock/$qrToken': typeof ClockQrTokenRoute
   '/_authed/': typeof AuthedIndexRoute
   '/_authed/people/$memberId': typeof AuthedPeopleMemberIdRoute
@@ -174,6 +183,7 @@ export interface FileRouteTypes {
     | '/shifts'
     | '/stock'
     | '/warehouse'
+    | '/welcome'
     | '/clock/$qrToken'
     | '/people/$memberId'
     | '/people/'
@@ -190,6 +200,7 @@ export interface FileRouteTypes {
     | '/shifts'
     | '/stock'
     | '/warehouse'
+    | '/welcome'
     | '/clock/$qrToken'
     | '/'
     | '/people/$memberId'
@@ -208,6 +219,7 @@ export interface FileRouteTypes {
     | '/_authed/shifts'
     | '/_authed/stock'
     | '/_authed/warehouse'
+    | '/_authed/welcome'
     | '/clock/$qrToken'
     | '/_authed/'
     | '/_authed/people/$memberId'
@@ -249,6 +261,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/clock/$qrToken'
       preLoaderRoute: typeof ClockQrTokenRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authed/welcome': {
+      id: '/_authed/welcome'
+      path: '/welcome'
+      fullPath: '/welcome'
+      preLoaderRoute: typeof AuthedWelcomeRouteImport
+      parentRoute: typeof AuthedRoute
     }
     '/_authed/warehouse': {
       id: '/_authed/warehouse'
@@ -348,6 +367,7 @@ interface AuthedRouteChildren {
   AuthedShiftsRoute: typeof AuthedShiftsRoute
   AuthedStockRoute: typeof AuthedStockRoute
   AuthedWarehouseRoute: typeof AuthedWarehouseRoute
+  AuthedWelcomeRoute: typeof AuthedWelcomeRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
   AuthedPeopleMemberIdRoute: typeof AuthedPeopleMemberIdRoute
   AuthedPeopleIndexRoute: typeof AuthedPeopleIndexRoute
@@ -364,6 +384,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedShiftsRoute: AuthedShiftsRoute,
   AuthedStockRoute: AuthedStockRoute,
   AuthedWarehouseRoute: AuthedWarehouseRoute,
+  AuthedWelcomeRoute: AuthedWelcomeRoute,
   AuthedIndexRoute: AuthedIndexRoute,
   AuthedPeopleMemberIdRoute: AuthedPeopleMemberIdRoute,
   AuthedPeopleIndexRoute: AuthedPeopleIndexRoute,

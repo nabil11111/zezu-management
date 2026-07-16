@@ -74,7 +74,19 @@ interface Insights {
   worstDay: { date: string; siteName: string; total: number } | null;
   weekly: Array<{ weekLabel: string; total: number }>;
   payroll: { outstandingHours: number; outstandingAmount: number };
+  /** CEO-controlled toggles — the client hides sales/salary figures when false. */
+  salesVisible: boolean;
+  salaryVisible: boolean;
 }
+
+const emptySales: SalesTotals = {
+  total: 0,
+  uber: 0,
+  takeaway: 0,
+  dineIn: 0,
+  daysLogged: 0,
+  avgPerDay: 0,
+};
 
 const insightsInput = z
   .object({
@@ -101,6 +113,8 @@ export const getInsights = createServerFn({ method: "GET" })
   .handler(async ({ data }): Promise<Insights> => {
     const { requireCeo } = await import("@/lib/auth.server");
     await requireCeo();
+    const { getVisibilityFlags } = await import("@/server/settings-flags");
+    const { salesVisible, salaryVisible } = await getVisibilityFlags();
 
     const {
       db,
@@ -178,10 +192,12 @@ export const getInsights = createServerFn({ method: "GET" })
       if (mem.hourlyRate != null) outstandingAmount += outstanding * Number(mem.hourlyRate);
     }
 
-    const payroll = {
-      outstandingHours: round2(outstandingHours),
-      outstandingAmount: round2(outstandingAmount),
-    };
+    const payroll = salaryVisible
+      ? {
+          outstandingHours: round2(outstandingHours),
+          outstandingAmount: round2(outstandingAmount),
+        }
+      : { outstandingHours: 0, outstandingAmount: 0 };
 
     // ── active sites ─────────────────────────────────────────────────────
     const allSiteRows = await db
@@ -205,6 +221,8 @@ export const getInsights = createServerFn({ method: "GET" })
         worstDay: null,
         weekly: [],
         payroll,
+        salesVisible,
+        salaryVisible,
       };
     }
 
@@ -374,6 +392,8 @@ export const getInsights = createServerFn({ method: "GET" })
     }
 
     // ── assemble per-site + totals ───────────────────────────────────────
+    // Sales figures and salary figures are hidden independently — labourPct
+    // needs both (it divides labour cost by sales) so it's gated on both.
     const sites: SiteInsight[] = siteRows.map((s) => {
       const salesRaw = salesBySite.get(s.id)!;
       const hoursRaw = hoursBySite.get(s.id)!;
@@ -383,17 +403,22 @@ export const getInsights = createServerFn({ method: "GET" })
       return {
         id: s.id,
         name: s.name,
-        sales: {
-          total: round2(salesRaw.total),
-          uber: round2(salesRaw.uber),
-          takeaway: round2(salesRaw.takeaway),
-          dineIn: round2(salesRaw.dineIn),
-          daysLogged: salesRaw.daysLogged,
-          avgPerDay: round2(avgPerDay),
-        },
+        sales: salesVisible
+          ? {
+              total: round2(salesRaw.total),
+              uber: round2(salesRaw.uber),
+              takeaway: round2(salesRaw.takeaway),
+              dineIn: round2(salesRaw.dineIn),
+              daysLogged: salesRaw.daysLogged,
+              avgPerDay: round2(avgPerDay),
+            }
+          : emptySales,
         hours: { verified: round2(hoursRaw.verified), pending: round2(hoursRaw.pending) },
-        labourCost: round2(hoursRaw.labourCost),
-        labourPct: labourPct !== null ? Math.round(labourPct * 10000) / 10000 : null,
+        labourCost: salaryVisible ? round2(hoursRaw.labourCost) : 0,
+        labourPct:
+          salesVisible && salaryVisible && labourPct !== null
+            ? Math.round(labourPct * 10000) / 10000
+            : null,
         orders: { ...ordersRaw },
       };
     });
@@ -435,17 +460,22 @@ export const getInsights = createServerFn({ method: "GET" })
     const totalLabourPct = totalsRaw.total > 0 ? totalsRaw.labourCost / totalsRaw.total : null;
 
     const totals: Totals = {
-      sales: {
-        total: round2(totalsRaw.total),
-        uber: round2(totalsRaw.uber),
-        takeaway: round2(totalsRaw.takeaway),
-        dineIn: round2(totalsRaw.dineIn),
-        daysLogged: totalsRaw.daysLogged,
-        avgPerDay: round2(totalAvgPerDay),
-      },
+      sales: salesVisible
+        ? {
+            total: round2(totalsRaw.total),
+            uber: round2(totalsRaw.uber),
+            takeaway: round2(totalsRaw.takeaway),
+            dineIn: round2(totalsRaw.dineIn),
+            daysLogged: totalsRaw.daysLogged,
+            avgPerDay: round2(totalAvgPerDay),
+          }
+        : emptySales,
       hours: { verified: round2(totalsRaw.verified), pending: round2(totalsRaw.pending) },
-      labourCost: round2(totalsRaw.labourCost),
-      labourPct: totalLabourPct !== null ? Math.round(totalLabourPct * 10000) / 10000 : null,
+      labourCost: salaryVisible ? round2(totalsRaw.labourCost) : 0,
+      labourPct:
+        salesVisible && salaryVisible && totalLabourPct !== null
+          ? Math.round(totalLabourPct * 10000) / 10000
+          : null,
       orders: {
         placed: totalsRaw.placed,
         received: totalsRaw.received,
@@ -453,5 +483,16 @@ export const getInsights = createServerFn({ method: "GET" })
       },
     };
 
-    return { month, allSites: allSiteRows, sites, totals, bestDay, worstDay, weekly, payroll };
+    return {
+      month,
+      allSites: allSiteRows,
+      sites,
+      totals,
+      bestDay: salesVisible ? bestDay : null,
+      worstDay: salesVisible ? worstDay : null,
+      weekly: salesVisible ? weekly : [],
+      payroll,
+      salesVisible,
+      salaryVisible,
+    };
   });

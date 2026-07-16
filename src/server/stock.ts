@@ -36,14 +36,33 @@ async function getItemLocationId(id: string): Promise<string> {
   return row.locationId;
 }
 
+/**
+ * The overview is shared ground between "just log usage" staff and
+ * "manage the catalog" staff — pass if either capability is held (or CEO/
+ * assigned manager), so viewing levels never requires both.
+ */
+async function requireStockAccess(locationId: string) {
+  const { requireAuth, getActorLocationIds, assertLocationAccess, getActorCapabilities } =
+    await import("@/lib/auth.server");
+  const actor = await requireAuth();
+  if (actor.role === "ceo") return actor;
+
+  const locationIds = await getActorLocationIds(actor);
+  assertLocationAccess(locationIds, locationId);
+
+  const caps = await getActorCapabilities(actor);
+  if (!caps.includes("log_usage") && !caps.includes("manage_stock")) {
+    throw new Error("Not allowed");
+  }
+  return actor;
+}
+
 // ── overview ─────────────────────────────────────────────────────────────
 
 export const getStockOverview = createServerFn({ method: "GET" })
   .validator(z.object({ locationId: z.string().uuid() }))
   .handler(async ({ data }) => {
-    const { requireManager, assertLocationAccess } = await import("@/lib/auth.server");
-    const { locationIds } = await requireManager();
-    assertLocationAccess(locationIds, data.locationId);
+    await requireStockAccess(data.locationId);
 
     const { db, stockItems, stockMoves, members } = await import("@/db");
     const { eq, asc, desc } = await import("drizzle-orm");
@@ -150,9 +169,8 @@ export const createStockItem = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
-    const { requireManager, assertLocationAccess } = await import("@/lib/auth.server");
-    const { actor, locationIds } = await requireManager();
-    assertLocationAccess(locationIds, data.locationId);
+    const { requireCapabilityAtLocation } = await import("@/lib/auth.server");
+    const actor = await requireCapabilityAtLocation("manage_stock", data.locationId);
 
     const { db, stockItems, stockMoves } = await import("@/db");
     const { sql } = await import("drizzle-orm");
@@ -216,11 +234,9 @@ export const updateStockItem = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
-    const { requireManager, assertLocationAccess } = await import("@/lib/auth.server");
-    const { locationIds } = await requireManager();
-
+    const { requireCapabilityAtLocation } = await import("@/lib/auth.server");
     const locationId = await getItemLocationId(data.id);
-    assertLocationAccess(locationIds, locationId);
+    await requireCapabilityAtLocation("manage_stock", locationId);
 
     const { db, stockItems } = await import("@/db");
     const { eq } = await import("drizzle-orm");
@@ -250,11 +266,9 @@ export const updateStockItem = createServerFn({ method: "POST" })
 export const setStockItemActive = createServerFn({ method: "POST" })
   .validator(z.object({ id: z.string().uuid(), active: z.boolean() }))
   .handler(async ({ data }) => {
-    const { requireManager, assertLocationAccess } = await import("@/lib/auth.server");
-    const { locationIds } = await requireManager();
-
+    const { requireCapabilityAtLocation } = await import("@/lib/auth.server");
     const locationId = await getItemLocationId(data.id);
-    assertLocationAccess(locationIds, locationId);
+    await requireCapabilityAtLocation("manage_stock", locationId);
 
     const { db, stockItems } = await import("@/db");
     const { eq } = await import("drizzle-orm");
@@ -290,11 +304,9 @@ export const logMove = createServerFn({ method: "POST" })
       throw new Error("Quantity must be positive for usage and delivery");
     }
 
-    const { requireManager, assertLocationAccess } = await import("@/lib/auth.server");
-    const { actor, locationIds } = await requireManager();
-
+    const { requireCapabilityAtLocation } = await import("@/lib/auth.server");
     const locationId = await getItemLocationId(data.stockItemId);
-    assertLocationAccess(locationIds, locationId);
+    const actor = await requireCapabilityAtLocation("log_usage", locationId);
 
     const { db, stockItems, stockMoves } = await import("@/db");
     const { eq, sql } = await import("drizzle-orm");
@@ -343,9 +355,8 @@ export const logDayUsage = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
-    const { requireManager, assertLocationAccess } = await import("@/lib/auth.server");
-    const { actor, locationIds } = await requireManager();
-    assertLocationAccess(locationIds, data.locationId);
+    const { requireCapabilityAtLocation } = await import("@/lib/auth.server");
+    const actor = await requireCapabilityAtLocation("log_usage", data.locationId);
 
     const entries = data.entries.filter((e) => e.quantity > 0);
     if (entries.length === 0) return { logged: 0 };

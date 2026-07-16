@@ -18,6 +18,49 @@ export const ORDER_STATUSES = ["placed", "sent", "received", "cancelled"] as con
 export const orderStatusSchema = z.enum(ORDER_STATUSES);
 export type OrderStatus = z.infer<typeof orderStatusSchema>;
 
+// ── per-member capabilities (configured when adding an employee) ────────────
+// The shop-floor actions a member's code can unlock. Role sets the lane; the
+// CEO ticks the exact capabilities on each person. CEO implicitly has all.
+export const MEMBER_CAPABILITIES = [
+  "open_shop",
+  "log_usage",
+  "manage_stock",
+  "place_orders",
+  "verify_shifts",
+  "set_rota",
+] as const;
+export const capabilitySchema = z.enum(MEMBER_CAPABILITIES);
+export type Capability = z.infer<typeof capabilitySchema>;
+
+/** Human labels for the add-member permission toggles. */
+export const CAPABILITY_LABEL: Record<Capability, string> = {
+  open_shop: "Open & close the shop",
+  log_usage: "Log stock usage & deliveries",
+  manage_stock: "Add & edit stock items",
+  place_orders: "Place & receive warehouse orders",
+  verify_shifts: "Verify clock-ins",
+  set_rota: "Set the rota",
+};
+
+/** One-line hint under each toggle. */
+export const CAPABILITY_HINT: Record<Capability, string> = {
+  open_shop: "Their code can start and close the shop day at the door.",
+  log_usage: "They can log tonight's usage and deliveries against stock.",
+  manage_stock: "They can add stock items and edit thresholds and suppliers.",
+  place_orders: "They can order from the warehouse and verify what arrives.",
+  verify_shifts: "They can approve other people's clock-ins.",
+  set_rota: "They can build and edit the weekly rota.",
+};
+
+/** What a manager gets ticked by default (staff start with none). */
+export const MANAGER_DEFAULT_CAPABILITIES: Capability[] = [...MEMBER_CAPABILITIES];
+
+/** True if this member (by role + saved permissions) has a capability. */
+export function memberHasCapability(role: string, permissions: unknown, cap: Capability): boolean {
+  if (role === "ceo") return true;
+  return Array.isArray(permissions) && permissions.includes(cap);
+}
+
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   placed: "Placed",
   sent: "On the van",

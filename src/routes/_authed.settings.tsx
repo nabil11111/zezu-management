@@ -21,31 +21,34 @@ import {
   regenerateQrToken,
 } from "@/server/locations";
 import { listActivity } from "@/server/activity-feed";
+import { getAppSettings, updateAppSettings } from "@/server/app-settings";
 
 /**
- * CEO-only. Locations (the switch-on flow + QR door posters), a live
- * activity feed ("every change is logged with a name and a time — quiet
- * accountability"), and the static brand card.
+ * CEO-only. Visibility & access toggles, locations (the switch-on flow + QR
+ * door posters), a live activity feed ("every change is logged with a name
+ * and a time — quiet accountability"), and the static brand card.
  */
 export const Route = createFileRoute("/_authed/settings")({
   beforeLoad: ({ context }) => {
     if (context.actor.role !== "ceo") throw redirect({ to: "/" });
   },
   loader: async () => {
-    const [locations, activity] = await Promise.all([
+    const [locations, activity, appSettings] = await Promise.all([
       listLocationsAdmin(),
       listActivity({ data: { limit: 30 } }),
+      getAppSettings(),
     ]);
-    return { locations, activity };
+    return { locations, activity, appSettings };
   },
   component: SettingsPage,
 });
 
 type LocationAdminRow = Awaited<ReturnType<typeof listLocationsAdmin>>[number];
 type ActivityRow = Awaited<ReturnType<typeof listActivity>>[number];
+type AppSettingsData = Awaited<ReturnType<typeof getAppSettings>>;
 
 function SettingsPage() {
-  const { locations, activity } = Route.useLoaderData();
+  const { locations, activity, appSettings } = Route.useLoaderData();
   const [posterLocation, setPosterLocation] = useState<LocationAdminRow | null>(null);
 
   return (
@@ -53,6 +56,7 @@ function SettingsPage() {
       <PageHeader kicker="CEO only" title="Settings" />
 
       <div className="flex flex-col gap-8">
+        <VisibilityAccessCard settings={appSettings} />
         <LocationsCard locations={locations} onShowPoster={setPosterLocation} />
         <ActivityCard activity={activity} />
         <BrandCard />
@@ -62,6 +66,102 @@ function SettingsPage() {
         <PosterDialog location={posterLocation} onClose={() => setPosterLocation(null)} />
       ) : null}
     </div>
+  );
+}
+
+// ── Visibility & access ──────────────────────────────────────────────────
+
+function VisibilityAccessCard({ settings }: { settings: AppSettingsData }) {
+  const router = useRouter();
+  const updateFn = useServerFn(updateAppSettings);
+  const [salesVisible, setSalesVisible] = useState(settings.salesVisible);
+  const [salaryVisible, setSalaryVisible] = useState(settings.salaryVisible);
+  const [videoUrl, setVideoUrl] = useState(settings.welcomeVideoUrl ?? "");
+  const [savingVideo, setSavingVideo] = useState(false);
+
+  async function toggleSales(value: boolean) {
+    setSalesVisible(value);
+    try {
+      await updateFn({ data: { salesVisible: value } });
+      toast.success(value ? "Sales figures are now visible" : "Sales figures are now hidden");
+      router.invalidate();
+    } catch (err) {
+      setSalesVisible(!value);
+      toast.error(err instanceof Error ? err.message : "Couldn't update");
+    }
+  }
+
+  async function toggleSalary(value: boolean) {
+    setSalaryVisible(value);
+    try {
+      await updateFn({ data: { salaryVisible: value } });
+      toast.success(value ? "Salary & pay are now visible" : "Salary & pay are now hidden");
+      router.invalidate();
+    } catch (err) {
+      setSalaryVisible(!value);
+      toast.error(err instanceof Error ? err.message : "Couldn't update");
+    }
+  }
+
+  async function saveVideo() {
+    setSavingVideo(true);
+    try {
+      const trimmed = videoUrl.trim();
+      await updateFn({ data: { welcomeVideoUrl: trimmed || null } });
+      setVideoUrl(trimmed);
+      toast.success("Welcome video link saved");
+      router.invalidate();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't save the link");
+    } finally {
+      setSavingVideo(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Visibility & Access</CardTitle>
+      </CardHeader>
+      <CardBody className="flex flex-col gap-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-foreground">Show sales figures</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              When off, sales are hidden from everyone. When on, only you (CEO) see them.
+            </p>
+          </div>
+          <Switch checked={salesVisible} onCheckedChange={toggleSales} />
+        </div>
+
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-foreground">Show salary & pay</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              When off, salary & pay are hidden from everyone. When on, only you (CEO) see them.
+            </p>
+          </div>
+          <Switch checked={salaryVisible} onCheckedChange={toggleSalary} />
+        </div>
+
+        <Field
+          label="Welcome video link"
+          hint="New crew must watch this once before they can use the app. A direct .mp4 link is truly unskippable."
+        >
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Input
+              value={videoUrl}
+              onChange={(e) => setVideoUrl(e.target.value)}
+              placeholder="https://…/welcome.mp4"
+              className="flex-1"
+            />
+            <Button onClick={saveVideo} disabled={savingVideo}>
+              {savingVideo ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </Field>
+      </CardBody>
+    </Card>
   );
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Copy, Minus, PartyPopper, Pencil, Plus, Boxes } from "lucide-react";
 import { toast } from "sonner";
@@ -38,6 +38,13 @@ import { cn } from "@/lib/utils";
  */
 
 export const Route = createFileRoute("/_authed/stock")({
+  beforeLoad: ({ context }) => {
+    const ok =
+      context.actor.role === "ceo" ||
+      context.capabilities.includes("log_usage") ||
+      context.capabilities.includes("manage_stock");
+    if (!ok) throw redirect({ to: "/" });
+  },
   validateSearch: (s: Record<string, unknown>): { location?: string } => ({
     location: typeof s.location === "string" ? s.location : undefined,
   }),
@@ -70,7 +77,11 @@ function formatQty(n: number): string {
 
 function StockPage() {
   const { locations, locationId, overview } = Route.useLoaderData();
+  const { actor, capabilities } = Route.useRouteContext();
   const navigate = Route.useNavigate();
+
+  const canLogUsage = actor.role === "ceo" || capabilities.includes("log_usage");
+  const canManageStock = actor.role === "ceo" || capabilities.includes("manage_stock");
 
   function selectLocation(id: string) {
     navigate({ search: (prev) => ({ ...prev, location: id }) });
@@ -105,8 +116,12 @@ function StockPage() {
         />
       ) : (
         <>
-          <UsageLogCard locationId={locationId} items={overview.items} />
-          <RunningLevelsCard locationId={locationId} items={overview.items} />
+          {canLogUsage ? <UsageLogCard locationId={locationId} items={overview.items} /> : null}
+          <RunningLevelsCard
+            locationId={locationId}
+            items={overview.items}
+            canManage={canManageStock}
+          />
           <OrderListCard
             orderList={overview.orderList}
             locationName={currentLocation?.name ?? "ZEZU"}
@@ -460,7 +475,15 @@ function QtyDialog({
 
 // ── zone 2: running levels ───────────────────────────────────────────────
 
-function RunningLevelsCard({ locationId, items }: { locationId: string; items: StockItemRow[] }) {
+function RunningLevelsCard({
+  locationId,
+  items,
+  canManage,
+}: {
+  locationId: string;
+  items: StockItemRow[];
+  canManage: boolean;
+}) {
   const router = useRouter();
   const setActiveFn = useServerFn(setStockItemActive);
   const [addOpen, setAddOpen] = useState(false);
@@ -479,9 +502,11 @@ function RunningLevelsCard({ locationId, items }: { locationId: string; items: S
     <Card className="mt-8">
       <CardHeader>
         <CardTitle>Running levels</CardTitle>
-        <Button size="sm" onClick={() => setAddOpen(true)}>
-          <Plus /> Add item
-        </Button>
+        {canManage ? (
+          <Button size="sm" onClick={() => setAddOpen(true)}>
+            <Plus /> Add item
+          </Button>
+        ) : null}
       </CardHeader>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] text-sm">
@@ -492,13 +517,16 @@ function RunningLevelsCard({ locationId, items }: { locationId: string; items: S
               <th className="px-3 py-2.5">Supplier</th>
               <th className="px-3 py-2.5" />
               <th className="px-3 py-2.5 text-center">Active</th>
-              <th className="px-3 py-2.5" />
+              {canManage ? <th className="px-3 py-2.5" /> : null}
             </tr>
           </thead>
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                <td
+                  colSpan={canManage ? 6 : 5}
+                  className="px-4 py-10 text-center text-sm text-muted-foreground"
+                >
                   No stock items yet — add the first one.
                 </td>
               </tr>
@@ -528,13 +556,24 @@ function RunningLevelsCard({ locationId, items }: { locationId: string; items: S
                     ) : null}
                   </td>
                   <td className="px-3 py-3 text-center">
-                    <Switch checked={item.active} onCheckedChange={(v) => toggleActive(item, v)} />
+                    {canManage ? (
+                      <Switch
+                        checked={item.active}
+                        onCheckedChange={(v) => toggleActive(item, v)}
+                      />
+                    ) : (
+                      <Badge tone={item.active ? "success" : "neutral"}>
+                        {item.active ? "Active" : "Inactive"}
+                      </Badge>
+                    )}
                   </td>
-                  <td className="px-3 py-3 text-right">
-                    <Button variant="ghost" size="icon-sm" onClick={() => setEditingItem(item)}>
-                      <Pencil />
-                    </Button>
-                  </td>
+                  {canManage ? (
+                    <td className="px-3 py-3 text-right">
+                      <Button variant="ghost" size="icon-sm" onClick={() => setEditingItem(item)}>
+                        <Pencil />
+                      </Button>
+                    </td>
+                  ) : null}
                 </tr>
               ))
             )}
@@ -542,8 +581,12 @@ function RunningLevelsCard({ locationId, items }: { locationId: string; items: S
         </table>
       </div>
 
-      <AddItemDialog locationId={locationId} open={addOpen} onOpenChange={setAddOpen} />
-      <EditItemDialog item={editingItem} onOpenChange={(v) => !v && setEditingItem(null)} />
+      {canManage ? (
+        <>
+          <AddItemDialog locationId={locationId} open={addOpen} onOpenChange={setAddOpen} />
+          <EditItemDialog item={editingItem} onOpenChange={(v) => !v && setEditingItem(null)} />
+        </>
+      ) : null}
     </Card>
   );
 }

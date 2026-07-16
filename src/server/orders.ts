@@ -4,14 +4,21 @@ import { logActivity } from "@/server/activity";
 import { orderStatusSchema, todayDateString, type OrderStatus } from "@/server/types";
 
 /**
- * Stock orders: branch → warehouse → branch verification.
+ * Stock orders: branch → warehouse → branch verification, constrained to the
+ * warehouse's own catalog (`warehouseProducts` — see @/server/warehouse). A
+ * branch employee places the day's order against whatever's currently
+ * available in that catalog; the warehouse sees it, packs it — possibly
+ * adjusting quantities if they're short — and marks it sent (`sent`). The
+ * branch employee then counts what actually came off the van and confirms
+ * receipt (`received`); THAT step is what writes `delivery` stock_moves and
+ * bumps stock_items.level, so levels always reflect what was RECEIVED, never
+ * what was promised.
  *
- * A branch employee places the day's order (`placed`). The warehouse sees
- * it, packs it — possibly adjusting quantities if they're short — and marks
- * it sent (`sent`). The branch employee then counts what actually came off
- * the van and confirms receipt (`received`); THAT step is what writes
- * `delivery` stock_moves and bumps stock_items.level, so levels always
- * reflect what was RECEIVED, never what was promised.
+ * If something arrives short (warehouse sent less than ordered) or missing
+ * off the van (branch received less than sent), the order has a SHORTFALL.
+ * The branch (or the warehouse) can log why, and either side can mark it
+ * resolved once it's settled — that's the issueReason / issueResolvedAt /
+ * issueResolvedBy trail on stock_orders.
  *
  * Only createServerFn + zod + the plain-TS helpers from @/server/types are
  * statically imported here — db, auth.server, and drizzle-orm are reached
@@ -19,9 +26,15 @@ import { orderStatusSchema, todayDateString, type OrderStatus } from "@/server/t
  * import from client-rendered routes.
  */
 
-/** Rounds a suggested order quantity to a sane display precision (nearest 0.25). */
-function roundQty(n: number): number {
-  return Math.round(n * 4) / 4;
+/** Either the branch (any location member) or the warehouse/CEO may act on
+ * an order's delivery-issue trail — whoever notices the shortfall first. */
+async function requireOrderIssueActor(locationId: string) {
+  const { requireLocationMember, requireWarehouse } = await import("@/lib/auth.server");
+  try {
+    return await requireLocationMember(locationId);
+  } catch {
+    return await requireWarehouse();
+  }
 }
 
 // ── branch: the order board ─────────────────────────────────────────────
@@ -32,30 +45,20 @@ export const getOrderBoard = createServerFn({ method: "GET" })
     const { requireLocationMember } = await import("@/lib/auth.server");
     await requireLocationMember(data.locationId);
 
-    const { db, stockItems, stockOrders, stockOrderItems, members } = await import("@/db");
+    const { db, warehouseProducts, stockItems, stockOrders, stockOrderItems, members } =
+      await import("@/db");
     const { eq, and, asc, desc, inArray } = await import("drizzle-orm");
 
-    const itemRows = await db
-      .select()
-      .from(stockItems)
-      .where(and(eq(stockItems.locationId, data.locationId), eq(stockItems.active, true)))
-      .orderBy(asc(stockItems.sortOrder), asc(stockItems.name));
-
-    const items = itemRows.map((r) => {
-      const level = Number(r.level);
-      const lowThreshold = r.lowThreshold != null ? Number(r.lowThreshold) : null;
-      const isLow = lowThreshold != null && level <= lowThreshold;
-      const suggestedQty = isLow ? roundQty(Math.max(lowThreshold! * 2 - level, 0)) : 0;
-      return {
-        id: r.id,
-        name: r.name,
-        unit: r.unit,
-        level,
-        lowThreshold,
-        isLow,
-        suggestedQty,
-      };
-    });
+    const catalog = await db
+      .select({
+        id: warehouseProducts.id,
+        name: warehouseProducts.name,
+        unit: warehouseProducts.unit,
+        supplier: warehouseProducts.supplier,
+      })
+      .from(warehouseProducts)
+      .where(and(eq(warehouseProducts.available, true), eq(warehouseProducts.active, true)))
+      .orderBy(asc(warehouseProducts.sortOrder), asc(warehouseProducts.name));
 
     const orderRows = await db.query.stockOrders.findMany({
       where: eq(stockOrders.locationId, data.locationId),
@@ -70,6 +73,7 @@ export const getOrderBoard = createServerFn({ method: "GET" })
             id: stockOrderItems.id,
             orderId: stockOrderItems.orderId,
             stockItemId: stockOrderItems.stockItemId,
+            warehouseProductId: stockOrderItems.warehouseProductId,
             quantityOrdered: stockOrderItems.quantityOrdered,
             quantitySent: stockOrderItems.quantitySent,
             quantityReceived: stockOrderItems.quantityReceived,
@@ -86,7 +90,9 @@ export const getOrderBoard = createServerFn({ method: "GET" })
     const memberIds = Array.from(
       new Set(
         orderRows.flatMap((o) =>
-          [o.placedBy, o.sentBy, o.receivedBy].filter((x): x is string => Boolean(x)),
+          [o.placedBy, o.sentBy, o.receivedBy, o.issueResolvedBy].filter((x): x is string =>
+            Boolean(x),
+          ),
         ),
       ),
     );
@@ -106,11 +112,17 @@ export const getOrderBoard = createServerFn({ method: "GET" })
       sentByName: o.sentBy ? (memberName.get(o.sentBy) ?? "Unknown") : null,
       receivedAt: o.receivedAt ? o.receivedAt.toISOString() : null,
       receivedByName: o.receivedBy ? (memberName.get(o.receivedBy) ?? "Unknown") : null,
+      issueReason: o.issueReason,
+      issueResolvedAt: o.issueResolvedAt ? o.issueResolvedAt.toISOString() : null,
+      issueResolvedByName: o.issueResolvedBy
+        ? (memberName.get(o.issueResolvedBy) ?? "Unknown")
+        : null,
       items: orderItemRows
         .filter((it) => it.orderId === o.id)
         .map((it) => ({
           orderItemId: it.id,
           stockItemId: it.stockItemId,
+          warehouseProductId: it.warehouseProductId,
           name: it.itemName,
           unit: it.itemUnit,
           quantityOrdered: Number(it.quantityOrdered),
@@ -121,10 +133,15 @@ export const getOrderBoard = createServerFn({ method: "GET" })
         })),
     }));
 
-    return { items, orders };
+    return { catalog, orders };
   });
 
-/** Branch employee places today's order. */
+/**
+ * Branch employee places today's order — constrained to whatever's currently
+ * available in the warehouse catalog. Each line resolves to (or creates) the
+ * matching branch stock_item by (name, unit), so the branch's own stock list
+ * grows to match what it actually orders in.
+ */
 export const placeOrder = createServerFn({ method: "POST" })
   .validator(
     z.object({
@@ -133,7 +150,7 @@ export const placeOrder = createServerFn({ method: "POST" })
       items: z
         .array(
           z.object({
-            stockItemId: z.string().uuid(),
+            warehouseProductId: z.string().uuid(),
             quantity: z.number().positive(),
           }),
         )
@@ -141,26 +158,26 @@ export const placeOrder = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
-    const { requireLocationMember } = await import("@/lib/auth.server");
-    const actor = await requireLocationMember(data.locationId);
+    const { requireCapabilityAtLocation } = await import("@/lib/auth.server");
+    const actor = await requireCapabilityAtLocation("place_orders", data.locationId);
 
-    const { db, stockItems, stockOrders, stockOrderItems, locations } = await import("@/db");
-    const { eq, and, inArray } = await import("drizzle-orm");
+    const { db, warehouseProducts, stockItems, stockOrders, stockOrderItems, locations } =
+      await import("@/db");
+    const { eq, and, inArray, sql } = await import("drizzle-orm");
 
-    const requestedIds = data.items.map((i) => i.stockItemId);
-    const owned = await db
-      .select({ id: stockItems.id })
-      .from(stockItems)
-      .where(
-        and(
-          eq(stockItems.locationId, data.locationId),
-          eq(stockItems.active, true),
-          inArray(stockItems.id, requestedIds),
-        ),
-      );
-    const ownedIds = new Set(owned.map((o) => o.id));
-    const invalid = data.items.some((i) => !ownedIds.has(i.stockItemId));
-    if (invalid) throw new Error("One or more items don't belong to this location");
+    const requestedIds = data.items.map((i) => i.warehouseProductId);
+    const products = await db
+      .select()
+      .from(warehouseProducts)
+      .where(inArray(warehouseProducts.id, requestedIds));
+    const productById = new Map(products.map((p) => [p.id, p]));
+
+    for (const item of data.items) {
+      const product = productById.get(item.warehouseProductId);
+      if (!product || !product.available || !product.active) {
+        throw new Error("One or more items are no longer available from the warehouse");
+      }
+    }
 
     const order = await db.transaction(async (tx) => {
       const [inserted] = await tx
@@ -173,13 +190,46 @@ export const placeOrder = createServerFn({ method: "POST" })
         })
         .returning();
 
-      await tx.insert(stockOrderItems).values(
-        data.items.map((i) => ({
+      for (const item of data.items) {
+        const product = productById.get(item.warehouseProductId)!;
+
+        // Find (or create) the branch stock line this catalog product maps to.
+        const [existing] = await tx
+          .select({ id: stockItems.id })
+          .from(stockItems)
+          .where(
+            and(
+              eq(stockItems.locationId, data.locationId),
+              eq(stockItems.name, product.name),
+              eq(stockItems.unit, product.unit),
+            ),
+          )
+          .limit(1);
+
+        let stockItemId = existing?.id;
+        if (!stockItemId) {
+          const [created] = await tx
+            .insert(stockItems)
+            .values({
+              locationId: data.locationId,
+              name: product.name,
+              unit: product.unit,
+              level: "0",
+              supplier: product.supplier,
+              active: true,
+              sortOrder: sql`(select coalesce(max(sort_order), -1) + 1 from stock_items where location_id = ${data.locationId})`,
+            })
+            .returning({ id: stockItems.id });
+          stockItemId = created.id;
+        }
+
+        await tx.insert(stockOrderItems).values({
           orderId: inserted.id,
-          stockItemId: i.stockItemId,
-          quantityOrdered: String(i.quantity),
-        })),
-      );
+          stockItemId,
+          warehouseProductId: product.id,
+          quantityOrdered: String(item.quantity),
+        });
+      }
 
       return inserted;
     });
@@ -368,6 +418,95 @@ export const setItemUnloaded = createServerFn({ method: "POST" })
     return { success: true as const };
   });
 
+// ── delivery issues: shortfall reason + resolution ──────────────────────
+
+/**
+ * Either the branch (whoever spots the shortfall) or the warehouse can log
+ * why an order came up short. Non-destructive: logging a new reason just
+ * overwrites the open reason text, resolution is a separate step.
+ */
+export const reportOrderIssue = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      orderId: z.string().uuid(),
+      reason: z.string().trim().min(1, "Add a reason"),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { db, stockOrders, locations } = await import("@/db");
+    const { eq } = await import("drizzle-orm");
+
+    const order = await db.query.stockOrders.findFirst({ where: eq(stockOrders.id, data.orderId) });
+    if (!order) throw new Error("Order not found");
+
+    await requireOrderIssueActor(order.locationId);
+
+    await db
+      .update(stockOrders)
+      .set({
+        issueReason: data.reason,
+        issueResolvedAt: null,
+        issueResolvedBy: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(stockOrders.id, data.orderId));
+
+    const location = await db.query.locations.findFirst({
+      where: eq(locations.id, order.locationId),
+    });
+
+    await logActivity("stock_order", order.id, "issue_reported", {
+      locationName: location?.name ?? "Unknown",
+      reason: data.reason,
+    });
+
+    return { success: true as const };
+  });
+
+/** Marks an order's delivery issue settled — with the warehouse, or however it got sorted. */
+export const resolveOrderIssue = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      orderId: z.string().uuid(),
+      note: z.string().trim().optional(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { db, stockOrders, locations } = await import("@/db");
+    const { eq } = await import("drizzle-orm");
+
+    const order = await db.query.stockOrders.findFirst({ where: eq(stockOrders.id, data.orderId) });
+    if (!order) throw new Error("Order not found");
+
+    const actor = await requireOrderIssueActor(order.locationId);
+
+    const note = data.note?.trim();
+    const issueReason = note
+      ? [order.issueReason, `Resolved: ${note}`].filter(Boolean).join("\n")
+      : order.issueReason;
+
+    await db
+      .update(stockOrders)
+      .set({
+        issueReason,
+        issueResolvedAt: new Date(),
+        issueResolvedBy: actor.memberId,
+        updatedAt: new Date(),
+      })
+      .where(eq(stockOrders.id, data.orderId));
+
+    const location = await db.query.locations.findFirst({
+      where: eq(locations.id, order.locationId),
+    });
+
+    await logActivity("stock_order", order.id, "issue_resolved", {
+      locationName: location?.name ?? "Unknown",
+      note: note ?? null,
+    });
+
+    return { success: true as const };
+  });
+
 // ── warehouse: the dispatch queue ────────────────────────────────────────
 
 /** Every branch's orders, newest first with 'placed' surfaced first. */
@@ -405,6 +544,7 @@ export const listWarehouseOrders = createServerFn({ method: "GET" })
             id: stockOrderItems.id,
             orderId: stockOrderItems.orderId,
             stockItemId: stockOrderItems.stockItemId,
+            warehouseProductId: stockOrderItems.warehouseProductId,
             quantityOrdered: stockOrderItems.quantityOrdered,
             quantitySent: stockOrderItems.quantitySent,
             quantityReceived: stockOrderItems.quantityReceived,
@@ -427,7 +567,9 @@ export const listWarehouseOrders = createServerFn({ method: "GET" })
     const memberIds = Array.from(
       new Set(
         sorted.flatMap((o) =>
-          [o.placedBy, o.sentBy, o.receivedBy].filter((x): x is string => Boolean(x)),
+          [o.placedBy, o.sentBy, o.receivedBy, o.issueResolvedBy].filter((x): x is string =>
+            Boolean(x),
+          ),
         ),
       ),
     );
@@ -449,11 +591,17 @@ export const listWarehouseOrders = createServerFn({ method: "GET" })
       sentByName: o.sentBy ? (memberName.get(o.sentBy) ?? "Unknown") : null,
       receivedAt: o.receivedAt ? o.receivedAt.toISOString() : null,
       receivedByName: o.receivedBy ? (memberName.get(o.receivedBy) ?? "Unknown") : null,
+      issueReason: o.issueReason,
+      issueResolvedAt: o.issueResolvedAt ? o.issueResolvedAt.toISOString() : null,
+      issueResolvedByName: o.issueResolvedBy
+        ? (memberName.get(o.issueResolvedBy) ?? "Unknown")
+        : null,
       items: orderItemRows
         .filter((it) => it.orderId === o.id)
         .map((it) => ({
           orderItemId: it.id,
           stockItemId: it.stockItemId,
+          warehouseProductId: it.warehouseProductId,
           name: it.itemName,
           unit: it.itemUnit,
           quantityOrdered: Number(it.quantityOrdered),

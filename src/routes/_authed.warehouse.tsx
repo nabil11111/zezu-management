@@ -1,21 +1,37 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, PackageCheck, Truck } from "lucide-react";
+import { Check, Package, PackageCheck, Pencil, Plus, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app-shell";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Field, Input } from "@/components/ui/field";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Field, Input, Textarea } from "@/components/ui/field";
+import { Switch } from "@/components/ui/switch";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DownloadPdfButton, PrintReport } from "@/components/print-report";
-import { listWarehouseOrders, markOrderSent, setItemLoaded } from "@/server/orders";
+import {
+  listWarehouseOrders,
+  markOrderSent,
+  reportOrderIssue,
+  resolveOrderIssue,
+  setItemLoaded,
+} from "@/server/orders";
+import {
+  createWarehouseProduct,
+  listWarehouseCatalog,
+  setWarehouseProductActive,
+  setWarehouseProductAvailable,
+  updateWarehouseProduct,
+} from "@/server/warehouse";
 import { ORDER_STATUS_LABEL, type OrderStatus } from "@/server/types";
 import { cn } from "@/lib/utils";
 
 /**
- * Warehouse — every branch's orders in one queue. Pack the van (adjust
+ * Warehouse — the warehouse's own catalog (what branches are allowed to
+ * order) plus every branch's orders in one queue. Pack the van (adjust
  * quantities down if something's short), mark it sent, then watch it move
  * to "on the van" and, once the branch counts it in, "received".
  */
@@ -26,11 +42,29 @@ export const Route = createFileRoute("/_authed/warehouse")({
       throw redirect({ to: "/" });
     }
   },
-  loader: async () => ({ orders: await listWarehouseOrders({ data: {} }) }),
+  loader: async () => ({
+    catalog: await listWarehouseCatalog(),
+    orders: await listWarehouseOrders({ data: {} }),
+  }),
   component: WarehousePage,
 });
 
 type WarehouseOrder = Awaited<ReturnType<typeof listWarehouseOrders>>[number];
+type CatalogProduct = Awaited<ReturnType<typeof listWarehouseCatalog>>[number];
+
+/** An order has a shortfall when the warehouse sent less than ordered, or
+ * the branch received less than was sent. */
+function orderHasShortfall(order: WarehouseOrder): boolean {
+  return order.items.some((i) => {
+    const sentShort =
+      (order.status === "sent" || order.status === "received") &&
+      (i.quantitySent ?? i.quantityOrdered) < i.quantityOrdered;
+    const receivedShort =
+      order.status === "received" &&
+      (i.quantityReceived ?? 0) < (i.quantitySent ?? i.quantityOrdered);
+    return sentShort || receivedShort;
+  });
+}
 
 /** Trims floating-point noise for display: 2.50 → "2.5", 3.00 → "3". */
 function formatQty(n: number): string {
@@ -63,7 +97,7 @@ function OrderStatusBadge({ status }: { status: OrderStatus }) {
 // ── page ─────────────────────────────────────────────────────────────────
 
 function WarehousePage() {
-  const { orders } = Route.useLoaderData();
+  const { catalog, orders } = Route.useLoaderData();
   const placedOrders = orders.filter((o) => o.status === "placed");
 
   return (
@@ -73,10 +107,314 @@ function WarehousePage() {
         title="Warehouse"
         actions={<DownloadPdfButton label="Download PDF" />}
       />
+      <CatalogSection catalog={catalog} />
       <WaitingQueue orders={placedOrders} />
       <HistorySection orders={orders} />
-      <WarehouseOrdersReport orders={orders} />
+      <WarehouseOrdersReport catalog={catalog} orders={orders} />
     </div>
+  );
+}
+
+// ── zone 0: my catalog ───────────────────────────────────────────────────
+
+function CatalogSection({ catalog }: { catalog: CatalogProduct[] }) {
+  const router = useRouter();
+  const setAvailableFn = useServerFn(setWarehouseProductAvailable);
+  const [addOpen, setAddOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<CatalogProduct | null>(null);
+  const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
+
+  const activeProducts = catalog.filter((p) => p.active);
+
+  async function toggleAvailable(product: CatalogProduct, available: boolean) {
+    setOptimistic((s) => ({ ...s, [product.id]: available }));
+    try {
+      await setAvailableFn({ data: { id: product.id, available } });
+      router.invalidate();
+    } catch (e) {
+      setOptimistic((s) => ({ ...s, [product.id]: !available }));
+      toast.error(e instanceof Error ? e.message : "Couldn't update product");
+    }
+  }
+
+  return (
+    <Card raised>
+      <CardHeader>
+        <CardTitle>My catalog</CardTitle>
+        <Button size="sm" onClick={() => setAddOpen(true)}>
+          <Plus /> Add product
+        </Button>
+      </CardHeader>
+      <CardBody>
+        {activeProducts.length === 0 ? (
+          <EmptyState
+            icon={Package}
+            title="No products yet"
+            hint="Add the products you carry so branches can order them."
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
+            {activeProducts.map((product) => {
+              const available = optimistic[product.id] ?? product.available;
+              return (
+                <div
+                  key={product.id}
+                  className={cn(
+                    "flex flex-col gap-3 border-2 px-4 py-3 transition-all",
+                    available ? "border-foreground/20" : "border-foreground/10 opacity-70",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate font-bold text-foreground">{product.name}</p>
+                      <p className="font-mono text-[10px] text-muted-foreground">
+                        {product.quantity != null
+                          ? `${formatQty(product.quantity)} ${product.unit} held`
+                          : product.unit}
+                      </p>
+                      {product.supplier ? (
+                        <p className="truncate font-mono text-[10px] text-muted-foreground">
+                          {product.supplier}
+                        </p>
+                      ) : null}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => setEditingProduct(product)}
+                    >
+                      <Pencil />
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 border-t-2 border-foreground/10 pt-3">
+                    {available ? (
+                      <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-foreground">
+                        Available
+                      </span>
+                    ) : (
+                      <Badge tone="neutral">Out of stock</Badge>
+                    )}
+                    <Switch
+                      checked={available}
+                      onCheckedChange={(v) => toggleAvailable(product, v)}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardBody>
+
+      <AddProductDialog open={addOpen} onOpenChange={setAddOpen} />
+      <EditProductDialog
+        product={editingProduct}
+        onOpenChange={(v) => !v && setEditingProduct(null)}
+      />
+    </Card>
+  );
+}
+
+function AddProductDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const router = useRouter();
+  const createFn = useServerFn(createWarehouseProduct);
+  const [busy, setBusy] = useState(false);
+  const [name, setName] = useState("");
+  const [unit, setUnit] = useState("kg");
+  const [quantity, setQuantity] = useState("");
+  const [supplier, setSupplier] = useState("");
+
+  function reset() {
+    setName("");
+    setUnit("kg");
+    setQuantity("");
+    setSupplier("");
+  }
+
+  async function submit() {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      toast.error("Product name is required");
+      return;
+    }
+    setBusy(true);
+    try {
+      await createFn({
+        data: {
+          name: trimmedName,
+          unit: unit.trim() || "kg",
+          quantity: quantity.trim() ? Number(quantity) : undefined,
+          supplier: supplier.trim() || undefined,
+        },
+      });
+      toast.success(`${trimmedName} added to the catalog`);
+      reset();
+      router.invalidate();
+      onOpenChange(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't add product");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        onOpenChange(v);
+        if (!v) reset();
+      }}
+    >
+      <DialogContent title="Add product">
+        <div className="flex flex-col gap-5">
+          <Field label="Product name">
+            <Input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Chicken breast"
+            />
+          </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Unit">
+              <Input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="kg" />
+            </Field>
+            <Field label="Quantity held (optional)">
+              <Input
+                inputMode="decimal"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                placeholder="0"
+              />
+            </Field>
+          </div>
+          <Field label="Supplier (optional)">
+            <Input
+              value={supplier}
+              onChange={(e) => setSupplier(e.target.value)}
+              placeholder="Bookers"
+            />
+          </Field>
+          <Button disabled={busy} onClick={submit}>
+            {busy ? "Adding…" : "Add product"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditProductDialog({
+  product,
+  onOpenChange,
+}: {
+  product: CatalogProduct | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const router = useRouter();
+  const updateFn = useServerFn(updateWarehouseProduct);
+  const setActiveFn = useServerFn(setWarehouseProductActive);
+  const [busy, setBusy] = useState(false);
+  const [name, setName] = useState("");
+  const [unit, setUnit] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [supplier, setSupplier] = useState("");
+
+  useEffect(() => {
+    if (product) {
+      setName(product.name);
+      setUnit(product.unit);
+      setQuantity(product.quantity != null ? String(product.quantity) : "");
+      setSupplier(product.supplier ?? "");
+    }
+  }, [product]);
+
+  async function submit() {
+    if (!product) return;
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      toast.error("Product name is required");
+      return;
+    }
+    setBusy(true);
+    try {
+      await updateFn({
+        data: {
+          id: product.id,
+          patch: {
+            name: trimmedName,
+            unit: unit.trim() || "kg",
+            quantity: quantity.trim() ? Number(quantity) : null,
+            supplier: supplier.trim() || null,
+          },
+        },
+      });
+      toast.success("Product updated");
+      router.invalidate();
+      onOpenChange(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't save changes");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function retire() {
+    if (!product) return;
+    if (!window.confirm(`Retire ${product.name}? Branches will no longer be able to order it.`)) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await setActiveFn({ data: { id: product.id, active: false } });
+      toast.success(`${product.name} retired`);
+      router.invalidate();
+      onOpenChange(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't retire product");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open={product !== null} onOpenChange={onOpenChange}>
+      <DialogContent title={product?.name ?? "Edit product"}>
+        <div className="flex flex-col gap-5">
+          <Field label="Product name">
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Unit">
+              <Input value={unit} onChange={(e) => setUnit(e.target.value)} />
+            </Field>
+            <Field label="Quantity held">
+              <Input
+                inputMode="decimal"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+              />
+            </Field>
+          </div>
+          <Field label="Supplier">
+            <Input value={supplier} onChange={(e) => setSupplier(e.target.value)} />
+          </Field>
+          <Button disabled={busy} onClick={submit}>
+            {busy ? "Saving…" : "Save changes"}
+          </Button>
+          <Button type="button" variant="destructive" disabled={busy} onClick={retire}>
+            Retire product
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -98,8 +436,15 @@ function shortfallSummary(order: WarehouseOrder): string {
   return shortfalls.map((i) => i.name).join(", ");
 }
 
-function WarehouseOrdersReport({ orders }: { orders: WarehouseOrder[] }) {
+function WarehouseOrdersReport({
+  catalog,
+  orders,
+}: {
+  catalog: CatalogProduct[];
+  orders: WarehouseOrder[];
+}) {
   const recent = orders.slice(0, 30);
+  const activeCatalog = catalog.filter((p) => p.active);
   return (
     <PrintReport
       title="Warehouse orders"
@@ -110,6 +455,34 @@ function WarehouseOrdersReport({ orders }: { orders: WarehouseOrder[] }) {
         year: "numeric",
       })}
     >
+      {activeCatalog.length > 0 ? (
+        <>
+          <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-[#6e6455]">
+            My catalog
+          </p>
+          <table className="mb-6 w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b-2 border-[#1b1510]/20 text-left text-xs font-bold uppercase tracking-widest">
+                <th className="py-2 pr-3">Product</th>
+                <th className="py-2 pr-3">Unit</th>
+                <th className="py-2 pr-3">Supplier</th>
+                <th className="py-2 pr-3">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activeCatalog.map((product) => (
+                <tr key={product.id} className="border-b border-[#1b1510]/10">
+                  <td className="py-2 pr-3 font-bold">{product.name}</td>
+                  <td className="py-2 pr-3">{product.unit}</td>
+                  <td className="py-2 pr-3">{product.supplier ?? "—"}</td>
+                  <td className="py-2 pr-3">{product.available ? "Available" : "Out of stock"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      ) : null}
+
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="border-b-2 border-[#1b1510] text-left text-xs font-bold uppercase tracking-widest">
@@ -399,15 +772,7 @@ function HistorySection({ orders }: { orders: WarehouseOrder[] }) {
 
 function HistoryRow({ order }: { order: WarehouseOrder }) {
   const [expanded, setExpanded] = useState(false);
-  const hasShortfall = order.items.some((i) => {
-    const sentShort =
-      (order.status === "sent" || order.status === "received") &&
-      (i.quantitySent ?? i.quantityOrdered) < i.quantityOrdered;
-    const receivedShort =
-      order.status === "received" &&
-      (i.quantityReceived ?? 0) < (i.quantitySent ?? i.quantityOrdered);
-    return sentShort || receivedShort;
-  });
+  const hasShortfall = orderHasShortfall(order);
 
   const subtitle =
     order.status === "sent" && order.sentAt
@@ -509,8 +874,91 @@ function HistoryRow({ order }: { order: WarehouseOrder }) {
               Warehouse note: {order.sentNote}
             </p>
           ) : null}
+          {hasShortfall ? (
+            <div className="border-t border-foreground/10 px-3 py-3">
+              <IssuePanel order={order} />
+            </div>
+          ) : null}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** Delivery-issue reason + resolution, shown once an order has a shortfall. */
+function IssuePanel({ order }: { order: WarehouseOrder }) {
+  const router = useRouter();
+  const reportFn = useServerFn(reportOrderIssue);
+  const resolveFn = useServerFn(resolveOrderIssue);
+  const [reason, setReason] = useState(order.issueReason ?? "");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  if (order.issueResolvedAt) {
+    return (
+      <div className="flex flex-col gap-1">
+        <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          Resolved by {order.issueResolvedByName ?? "Unknown"}
+        </p>
+        {order.issueReason ? (
+          <p className="text-xs text-muted-foreground">{order.issueReason}</p>
+        ) : null}
+      </div>
+    );
+  }
+
+  async function logReason() {
+    const trimmed = reason.trim();
+    if (!trimmed) {
+      toast.error("Add a reason");
+      return;
+    }
+    setBusy(true);
+    try {
+      await reportFn({ data: { orderId: order.id, reason: trimmed } });
+      toast.success("Reason logged");
+      router.invalidate();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't log the reason");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function markResolved() {
+    setBusy(true);
+    try {
+      await resolveFn({ data: { orderId: order.id, note: note.trim() || undefined } });
+      toast.success("Marked resolved");
+      setNote("");
+      router.invalidate();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't mark resolved");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-destructive">
+        Delivery issue — {order.locationName}
+      </p>
+      <Field label="Reason">
+        <Textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="What went wrong?"
+        />
+      </Field>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" disabled={busy} onClick={logReason}>
+          Log reason
+        </Button>
+        <Button size="sm" variant="destructive" disabled={busy} onClick={markResolved}>
+          Mark resolved
+        </Button>
+      </div>
     </div>
   );
 }

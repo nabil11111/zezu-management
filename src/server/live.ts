@@ -53,13 +53,16 @@ export interface LiveViewResult {
     lowStockCount: number;
     pendingCount: number;
   };
+  /** False whenever the caller shouldn't see money — the client hides the takings blocks. */
+  salesVisible: boolean;
 }
 
-function emptyResult(): LiveViewResult {
+function emptyResult(salesVisible: boolean): LiveViewResult {
   return {
     generatedAt: new Date().toISOString(),
     sites: [],
     totals: { todayTotal: 0, monthTotal: 0, clockedInCount: 0, lowStockCount: 0, pendingCount: 0 },
+    salesVisible,
   };
 }
 
@@ -67,12 +70,16 @@ function emptyResult(): LiveViewResult {
 export const getLiveView = createServerFn({ method: "GET" }).handler(
   async (): Promise<LiveViewResult> => {
     const { requireManager } = await import("@/lib/auth.server");
+    const { getVisibilityFlags } = await import("@/server/settings-flags");
     const { db, locations, shopDays, shifts, members, salesEntries, stockItems } =
       await import("@/db");
     const { and, asc, eq, gte, inArray, isNull, isNotNull, sql } = await import("drizzle-orm");
     const { todayDateString } = await import("@/server/types");
 
-    const { locationIds } = await requireManager();
+    const { actor, locationIds } = await requireManager();
+    const { salesVisible: salesFlag } = await getVisibilityFlags();
+    // Money is visible only to the CEO, and only once the toggle is on.
+    const salesVisible = actor.role === "ceo" && salesFlag;
 
     const today = todayDateString();
     const yesterday = todayDateString(-1);
@@ -95,7 +102,7 @@ export const getLiveView = createServerFn({ method: "GET" }).handler(
       .orderBy(asc(locations.sortOrder));
 
     const ids = siteRows.map((s) => s.id);
-    if (ids.length === 0) return emptyResult();
+    if (ids.length === 0) return emptyResult(salesVisible);
 
     const [
       shopDayRows,
@@ -279,8 +286,10 @@ export const getLiveView = createServerFn({ method: "GET" }).handler(
         status,
         clockedIn,
         pendingVerifications,
-        todaySales,
-        yesterdaySales,
+        // Money is hidden from everyone except the CEO with the toggle on —
+        // clockedIn, stock, pending, and status all stay intact regardless.
+        todaySales: salesVisible ? todaySales : null,
+        yesterdaySales: salesVisible ? yesterdaySales : null,
         lowStock,
       };
     });
@@ -288,7 +297,14 @@ export const getLiveView = createServerFn({ method: "GET" }).handler(
     return {
       generatedAt: new Date().toISOString(),
       sites,
-      totals: { todayTotal, monthTotal, clockedInCount, lowStockCount, pendingCount },
+      totals: {
+        todayTotal: salesVisible ? todayTotal : 0,
+        monthTotal: salesVisible ? monthTotal : 0,
+        clockedInCount,
+        lowStockCount,
+        pendingCount,
+      },
+      salesVisible,
     };
   },
 );

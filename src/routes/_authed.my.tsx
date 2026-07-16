@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { Clock as ClockIcon, Crown } from "lucide-react";
 import { PageHeader } from "@/components/app-shell";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +10,11 @@ import { formatGBP } from "@/server/types";
 import { PrintReport, DownloadPdfButton } from "@/components/print-report";
 
 export const Route = createFileRoute("/_authed/my")({
+  // Warehouse has no shifts section — clocking in/out is a branch-shop
+  // concept that doesn't apply to their role.
+  beforeLoad: ({ context }) => {
+    if (context.actor.role === "warehouse") throw redirect({ to: "/warehouse" });
+  },
   loader: async () => ({ data: await listMyShifts() }),
   component: MyShiftsPage,
 });

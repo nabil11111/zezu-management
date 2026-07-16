@@ -16,11 +16,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PrintReport, DownloadPdfButton } from "@/components/print-report";
 import { listMembers, createMember, listLocationOptions } from "@/server/people";
 import { getCurrentActor } from "@/lib/auth";
-import { MEMBER_ROLES, formatGBP, type MemberRole } from "@/server/types";
+import {
+  MEMBER_ROLES,
+  MEMBER_CAPABILITIES,
+  CAPABILITY_LABEL,
+  CAPABILITY_HINT,
+  MANAGER_DEFAULT_CAPABILITIES,
+  formatGBP,
+  type MemberRole,
+  type Capability,
+} from "@/server/types";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authed/people/")({
@@ -82,8 +92,9 @@ function ChipButton({
 
 function PeoplePage() {
   const { members, locationOptions } = Route.useLoaderData();
-  const { actor } = Route.useRouteContext();
+  const { actor, flags } = Route.useRouteContext();
   const isCeo = actor.role === "ceo";
+  const canSeePay = isCeo && flags.salaryVisible;
 
   const [locationFilter, setLocationFilter] = useState<string>("all");
   const [roleFilter, setRoleFilter] = useState<string>("all");
@@ -103,7 +114,7 @@ function PeoplePage() {
   const addButton = isCeo ? <AddMemberDialog locationOptions={locationOptions} /> : undefined;
   const actions = (
     <>
-      <DownloadPdfButton />
+      {canSeePay ? <DownloadPdfButton /> : null}
       {addButton}
     </>
   );
@@ -111,7 +122,7 @@ function PeoplePage() {
   return (
     <div>
       <PageHeader kicker="ZEZU Operations" title="People" actions={actions} />
-      <PayrollReport members={members} />
+      {canSeePay ? <PayrollReport members={members} /> : null}
 
       {members.length > 0 ? (
         <div className="mb-8 flex flex-wrap items-center gap-4">
@@ -281,6 +292,55 @@ function PayrollReport({ members }: { members: PeopleMember[] }) {
   );
 }
 
+/** Defaults applied whenever the role field changes in an add/edit dialog. */
+function defaultCapabilitiesForRole(role: MemberRole): Capability[] {
+  if (role === "manager") return MANAGER_DEFAULT_CAPABILITIES;
+  return [];
+}
+
+/**
+ * "What they can do" checklist — hidden entirely for ceo/warehouse (their
+ * access isn't per-capability), otherwise a toggle per MEMBER_CAPABILITIES.
+ */
+function CapabilitiesSection({
+  role,
+  selected,
+  onChange,
+}: {
+  role: MemberRole;
+  selected: Capability[];
+  onChange: (next: Capability[]) => void;
+}) {
+  if (role === "ceo" || role === "warehouse") return null;
+
+  return (
+    <Field label="What they can do">
+      <div className="flex flex-col gap-3 border-2 border-foreground/15 p-4">
+        {MEMBER_CAPABILITIES.map((cap) => {
+          const checked = selected.includes(cap);
+          return (
+            <div
+              key={cap}
+              className="flex items-start justify-between gap-3 border-b border-foreground/10 pb-3 last:border-b-0 last:pb-0"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-foreground">{CAPABILITY_LABEL[cap]}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{CAPABILITY_HINT[cap]}</p>
+              </div>
+              <Switch
+                checked={checked}
+                onCheckedChange={(v) =>
+                  onChange(v ? [...selected, cap] : selected.filter((c) => c !== cap))
+                }
+              />
+            </div>
+          );
+        })}
+      </div>
+    </Field>
+  );
+}
+
 function AddMemberDialog({ locationOptions }: { locationOptions: LocationOption[] }) {
   const router = useRouter();
   const createFn = useServerFn(createMember);
@@ -292,6 +352,7 @@ function AddMemberDialog({ locationOptions }: { locationOptions: LocationOption[
   const [startedAt, setStartedAt] = useState("");
   const [notes, setNotes] = useState("");
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
+  const [permissions, setPermissions] = useState<Capability[]>([]);
   const [saving, setSaving] = useState(false);
   const [revealed, setRevealed] = useState<{ name: string; code: string } | null>(null);
 
@@ -303,7 +364,13 @@ function AddMemberDialog({ locationOptions }: { locationOptions: LocationOption[
     setStartedAt("");
     setNotes("");
     setSelectedLocations([]);
+    setPermissions([]);
     setRevealed(null);
+  }
+
+  function onRoleChange(next: MemberRole) {
+    setRole(next);
+    setPermissions(defaultCapabilitiesForRole(next));
   }
 
   async function submit() {
@@ -322,6 +389,7 @@ function AddMemberDialog({ locationOptions }: { locationOptions: LocationOption[
           startedAt: startedAt || undefined,
           notes: notes.trim() || undefined,
           locationIds: selectedLocations,
+          permissions,
         },
       });
       setRevealed({ name: result.member.name, code: result.code });
@@ -383,7 +451,7 @@ function AddMemberDialog({ locationOptions }: { locationOptions: LocationOption[
             </Field>
             <div className="grid grid-cols-2 gap-4">
               <Field label="Role">
-                <Select value={role} onValueChange={(v) => setRole(v as MemberRole)}>
+                <Select value={role} onValueChange={(v) => onRoleChange(v as MemberRole)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -447,6 +515,7 @@ function AddMemberDialog({ locationOptions }: { locationOptions: LocationOption[
                 </div>
               )}
             </Field>
+            <CapabilitiesSection role={role} selected={permissions} onChange={setPermissions} />
             <Field label="Notes (optional)">
               <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
             </Field>

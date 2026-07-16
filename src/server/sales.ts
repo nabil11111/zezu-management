@@ -18,13 +18,15 @@ const salesEntryInput = z.object({
   note: z.string().optional().nullable(),
 });
 
-/** Auth-gated (manager+): create or replace the day's numbers for a site. */
+/** CEO-only, and only while sales are switched visible: create or replace the day's numbers for a site. */
 export const upsertSalesEntry = createServerFn({ method: "POST" })
   .validator(salesEntryInput)
   .handler(async ({ data }) => {
-    const { requireManager, assertLocationAccess } = await import("@/lib/auth.server");
-    const { actor, locationIds } = await requireManager();
-    assertLocationAccess(locationIds, data.locationId);
+    const { requireCeo } = await import("@/lib/auth.server");
+    const { getVisibilityFlags } = await import("@/server/settings-flags");
+    const actor = await requireCeo();
+    const { salesVisible } = await getVisibilityFlags();
+    if (!salesVisible) throw new Error("Sales are hidden");
 
     const date = data.date ?? todayDateString();
     const note = data.note?.trim() || null;
@@ -79,13 +81,15 @@ export const upsertSalesEntry = createServerFn({ method: "POST" })
     };
   });
 
-/** Auth-gated (manager+): the entry for one site/day, or null — prefills the entry form. */
+/** CEO-only, and only while sales are switched visible: the entry for one site/day, or null — prefills the entry form. */
 export const getEntryForDay = createServerFn({ method: "GET" })
   .validator(z.object({ locationId: z.string().uuid(), date: z.string() }))
   .handler(async ({ data }) => {
-    const { requireManager, assertLocationAccess } = await import("@/lib/auth.server");
-    const { locationIds } = await requireManager();
-    assertLocationAccess(locationIds, data.locationId);
+    const { requireCeo } = await import("@/lib/auth.server");
+    const { getVisibilityFlags } = await import("@/server/settings-flags");
+    await requireCeo();
+    const { salesVisible } = await getVisibilityFlags();
+    if (!salesVisible) throw new Error("Sales are hidden");
 
     const { db, salesEntries } = await import("@/db");
     const { and, eq } = await import("drizzle-orm");
@@ -166,28 +170,26 @@ function emptyDashboard(days: number) {
 }
 
 /**
- * Auth-gated (manager+): the sales dashboard — today vs last week, site vs
- * site, the channel mix, and the best/worst days on record.
+ * CEO-only, and only while sales are switched visible: the sales dashboard —
+ * today vs last week, site vs site, the channel mix, and the best/worst days
+ * on record.
  */
 export const getSalesDashboard = createServerFn({ method: "GET" })
   .validator(dashboardInput)
   .handler(async ({ data }) => {
-    const { requireManager, assertLocationAccess } = await import("@/lib/auth.server");
-    const { locationIds } = await requireManager();
+    const { requireCeo } = await import("@/lib/auth.server");
+    const { getVisibilityFlags } = await import("@/server/settings-flags");
+    await requireCeo();
+    const { salesVisible } = await getVisibilityFlags();
+    if (!salesVisible) throw new Error("Sales are hidden");
 
     const days = data?.days ?? 30;
-
-    if (data?.locationId) {
-      assertLocationAccess(locationIds, data.locationId);
-    }
 
     const { db, salesEntries, locations } = await import("@/db");
     const { and, eq, gte, lte, inArray, asc, desc, sql } = await import("drizzle-orm");
 
-    const accessibleWhere =
-      locationIds === "all"
-        ? eq(locations.active, true)
-        : and(eq(locations.active, true), inArray(locations.id, locationIds));
+    // CEO sees every active location — no per-actor location scoping needed.
+    const accessibleWhere = eq(locations.active, true);
 
     const accessibleLocations = await db
       .select({ id: locations.id, name: locations.name })

@@ -165,10 +165,12 @@ function SiteCard({
   site,
   urgentNotOpened,
   now,
+  salesVisible,
 }: {
   site: LiveViewSite;
   urgentNotOpened: boolean;
   now: number | null;
+  salesVisible: boolean;
 }) {
   return (
     <Card
@@ -207,26 +209,28 @@ function SiteCard({
           />
         </div>
 
-        {/* Takings so far */}
-        <div>
-          <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            Takings so far
-          </p>
-          {site.todaySales ? (
-            <div>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
-                <span>Uber {formatGBP(site.todaySales.uber)}</span>
-                <span>Takeaway {formatGBP(site.todaySales.takeaway)}</span>
-                <span>Dine-in {formatGBP(site.todaySales.dineIn)}</span>
+        {/* Takings so far — hidden entirely unless sales are switched visible */}
+        {salesVisible ? (
+          <div>
+            <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              Takings so far
+            </p>
+            {site.todaySales ? (
+              <div>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] uppercase text-muted-foreground">
+                  <span>Uber {formatGBP(site.todaySales.uber)}</span>
+                  <span>Takeaway {formatGBP(site.todaySales.takeaway)}</span>
+                  <span>Dine-in {formatGBP(site.todaySales.dineIn)}</span>
+                </div>
+                <p className="font-display text-3xl text-foreground">
+                  {formatGBP(site.todaySales.total)}
+                </p>
               </div>
-              <p className="font-display text-3xl text-foreground">
-                {formatGBP(site.todaySales.total)}
-              </p>
-            </div>
-          ) : (
-            <p className="font-mono text-xs text-muted-foreground">Day not logged yet</p>
-          )}
-        </div>
+            ) : (
+              <p className="font-mono text-xs text-muted-foreground">Day not logged yet</p>
+            )}
+          </div>
+        ) : null}
 
         {/* Flags */}
         <div className="mt-auto flex flex-wrap gap-3 pt-1">
@@ -242,7 +246,7 @@ function SiteCard({
               <Badge tone="pop">Verify ×{site.pendingVerifications}</Badge>
             </Link>
           ) : null}
-          {!site.yesterdaySales ? (
+          {salesVisible && !site.yesterdaySales ? (
             <Link to="/sales" className="transition-opacity hover:opacity-80">
               <Badge tone="danger">Yesterday not logged</Badge>
             </Link>
@@ -297,9 +301,20 @@ function LiveViewPage() {
         />
       ) : (
         <>
-          {/* Totals strip */}
-          <div className="mb-10 grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-5">
-            <StatBlock label="Sales this month so far" value={formatGBP(data.totals.monthTotal)} />
+          {/* Totals strip — the sales tile only shows once sales are switched
+              visible; the rest re-flows to fill the space when it's gone. */}
+          <div
+            className={cn(
+              "mb-10 grid grid-cols-2 gap-4 sm:gap-5",
+              data.salesVisible ? "sm:grid-cols-4" : "sm:grid-cols-3",
+            )}
+          >
+            {data.salesVisible ? (
+              <StatBlock
+                label="Sales this month so far"
+                value={formatGBP(data.totals.monthTotal)}
+              />
+            ) : null}
             <StatBlock label="On the clock" value={String(data.totals.clockedInCount)} />
             <StatBlock
               label="Low stock flags"
@@ -321,6 +336,7 @@ function LiveViewPage() {
                 site={site}
                 urgentNotOpened={site.status === "not_opened" && hour >= 11}
                 now={now}
+                salesVisible={data.salesVisible}
               />
             ))}
           </div>

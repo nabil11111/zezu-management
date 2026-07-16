@@ -1,7 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { logActivity } from "@/server/activity";
-import { memberRoleSchema, todayDateString, shiftHours, type MemberRole } from "@/server/types";
+import {
+  memberRoleSchema,
+  todayDateString,
+  shiftHours,
+  capabilitySchema,
+  type MemberRole,
+  type Capability,
+} from "@/server/types";
 
 /**
  * PEOPLE — every member of staff across the three sites: role, site(s),
@@ -147,6 +154,10 @@ export const listMembers = createServerFn({ method: "GET" }).handler(async () =>
   const { db, members, memberLocations, shifts, memberPayments } = await import("@/db");
   const { eq, and, inArray } = await import("drizzle-orm");
 
+  const { getVisibilityFlags } = await import("@/server/settings-flags");
+  const flags = await getVisibilityFlags();
+  const canSeePay = actor.role === "ceo" && flags.salaryVisible;
+
   let scopedIds: string[] | null = null; // null = no restriction (CEO)
   if (locationIds !== "all") {
     const visibleRows = locationIds.length
@@ -192,28 +203,32 @@ export const listMembers = createServerFn({ method: "GET" }).handler(async () =>
     hoursByMember.set(s.memberId, (hoursByMember.get(s.memberId) ?? 0) + hrs);
   }
 
-  const paymentRows = await db
-    .select({ memberId: memberPayments.memberId, hours: memberPayments.hours })
-    .from(memberPayments)
-    .where(inArray(memberPayments.memberId, rowIds));
-
   const paidHoursByMember = new Map<string, number>();
-  for (const p of paymentRows) {
-    paidHoursByMember.set(p.memberId, (paidHoursByMember.get(p.memberId) ?? 0) + Number(p.hours));
+  if (canSeePay) {
+    const paymentRows = await db
+      .select({ memberId: memberPayments.memberId, hours: memberPayments.hours })
+      .from(memberPayments)
+      .where(inArray(memberPayments.memberId, rowIds));
+    for (const p of paymentRows) {
+      paidHoursByMember.set(p.memberId, (paidHoursByMember.get(p.memberId) ?? 0) + Number(p.hours));
+    }
   }
 
   return memberRows.map((m) => {
     const isCeo = m.role === "ceo";
     const rate = m.hourlyRate !== null ? Number(m.hourlyRate) : null;
     const totalVerified = allTimeVerifiedByMember.get(m.id) ?? 0;
-    const paidHours = paidHoursByMember.get(m.id) ?? 0;
-    const outstandingHours = isCeo
-      ? null
-      : Math.max(0, Math.round((totalVerified - paidHours) * 100) / 100);
-    const payableAmount =
-      !isCeo && outstandingHours !== null && rate !== null
-        ? Math.round(outstandingHours * rate * 100) / 100
-        : null;
+
+    let outstandingHours: number | null = null;
+    let payableAmount: number | null = null;
+    if (canSeePay && !isCeo) {
+      const paidHours = paidHoursByMember.get(m.id) ?? 0;
+      outstandingHours = Math.max(0, Math.round((totalVerified - paidHours) * 100) / 100);
+      payableAmount =
+        outstandingHours !== null && rate !== null
+          ? Math.round(outstandingHours * rate * 100) / 100
+          : null;
+    }
 
     return {
       id: m.id,
@@ -231,6 +246,7 @@ export const listMembers = createServerFn({ method: "GET" }).handler(async () =>
       thisMonthVerifiedHours: Math.round((hoursByMember.get(m.id) ?? 0) * 100) / 100,
       outstandingHours,
       payableAmount,
+      permissions: (Array.isArray(m.permissions) ? m.permissions : []) as Capability[],
     };
   });
 });
@@ -283,16 +299,41 @@ export const getMember = createServerFn({ method: "GET" })
       allShiftsForSummary.filter((s) => s.status === "verified"),
     );
 
-    const paymentRows = await db.query.memberPayments.findMany({
-      where: eq(memberPayments.memberId, data.id),
-      with: { payer: true },
-      orderBy: (p, { desc }) => [desc(p.createdAt)],
-    });
-    const paidHours =
-      Math.round(paymentRows.reduce((sum, p) => sum + Number(p.hours), 0) * 100) / 100;
-    const outstandingHours = Math.max(0, Math.round((totalVerifiedHours - paidHours) * 100) / 100);
-    const rate = member.hourlyRate !== null ? Number(member.hourlyRate) : null;
-    const payableAmount = rate !== null ? Math.round(outstandingHours * rate * 100) / 100 : null;
+    const { getVisibilityFlags } = await import("@/server/settings-flags");
+    const flags = await getVisibilityFlags();
+    const canSeePay = actor.role === "ceo" && flags.salaryVisible;
+
+    let paidHours: number | null = null;
+    let outstandingHours: number | null = null;
+    let payableAmount: number | null = null;
+    let payments: Array<{
+      id: string;
+      amount: number;
+      hours: number;
+      note: string | null;
+      paidByName: string;
+      createdAt: Date;
+    }> = [];
+
+    if (canSeePay) {
+      const paymentRows = await db.query.memberPayments.findMany({
+        where: eq(memberPayments.memberId, data.id),
+        with: { payer: true },
+        orderBy: (p, { desc }) => [desc(p.createdAt)],
+      });
+      paidHours = Math.round(paymentRows.reduce((sum, p) => sum + Number(p.hours), 0) * 100) / 100;
+      outstandingHours = Math.max(0, Math.round((totalVerifiedHours - paidHours) * 100) / 100);
+      const rate = member.hourlyRate !== null ? Number(member.hourlyRate) : null;
+      payableAmount = rate !== null ? Math.round(outstandingHours * rate * 100) / 100 : null;
+      payments = paymentRows.slice(0, 20).map((p) => ({
+        id: p.id,
+        amount: Number(p.amount),
+        hours: Number(p.hours),
+        note: p.note,
+        paidByName: p.payer.name,
+        createdAt: p.createdAt,
+      }));
+    }
 
     return {
       id: member.id,
@@ -303,6 +344,7 @@ export const getMember = createServerFn({ method: "GET" })
       phone: member.phone,
       startedAt: member.startedAt,
       notes: member.notes,
+      permissions: (Array.isArray(member.permissions) ? member.permissions : []) as Capability[],
       locations: member.memberLocations.map((ml) => ({
         id: ml.location.id,
         name: ml.location.name,
@@ -322,14 +364,7 @@ export const getMember = createServerFn({ method: "GET" })
       paidHours,
       outstandingHours,
       payableAmount,
-      payments: paymentRows.slice(0, 20).map((p) => ({
-        id: p.id,
-        amount: Number(p.amount),
-        hours: Number(p.hours),
-        note: p.note,
-        paidByName: p.payer.name,
-        createdAt: p.createdAt,
-      })),
+      payments,
     };
   });
 
@@ -357,12 +392,15 @@ const createMemberSchema = z.object({
   startedAt: dateStringSchema.optional(),
   notes: z.string().optional(),
   locationIds: z.array(z.string().uuid()),
+  permissions: z.array(capabilitySchema).default([]),
 });
 
 /**
  * CEO-only: creates the member, assigns their sites, seeds the default
  * onboarding checklist, and mints a unique 4-digit code. The plaintext code
  * is returned ONCE — it is never stored and can never be read back.
+ * `permissions` is ignored (stored empty) for ceo/warehouse — CEO implicitly
+ * has every capability, and warehouse doesn't use branch capabilities.
  */
 export const createMember = createServerFn({ method: "POST" })
   .validator(createMemberSchema)
@@ -373,6 +411,8 @@ export const createMember = createServerFn({ method: "POST" })
     const { db, members, memberLocations, onboardingSteps } = await import("@/db");
 
     const { code, codeHash } = await generateUniqueCode();
+    const permissions: Capability[] =
+      data.role === "ceo" || data.role === "warehouse" ? [] : data.permissions;
 
     const [member] = await db
       .insert(members)
@@ -384,6 +424,7 @@ export const createMember = createServerFn({ method: "POST" })
         phone: data.phone ?? null,
         startedAt: data.startedAt ?? null,
         notes: data.notes ?? null,
+        permissions,
       })
       .returning();
 
@@ -403,6 +444,7 @@ export const createMember = createServerFn({ method: "POST" })
       name: member.name,
       role: member.role,
       locationIds: data.locationIds,
+      permissions,
     });
 
     return { member: { id: member.id, name: member.name, role: member.role as MemberRole }, code };
@@ -416,9 +458,14 @@ const updateMemberSchema = z.object({
   phone: z.string().min(1).nullable().optional(),
   startedAt: dateStringSchema.nullable().optional(),
   notes: z.string().nullable().optional(),
+  permissions: z.array(capabilitySchema).optional(),
 });
 
-/** CEO-only: edits name/role/hourlyRate/phone/startedAt/notes. */
+/**
+ * CEO-only: edits name/role/hourlyRate/phone/startedAt/notes/permissions.
+ * `permissions` is forced empty when the (possibly just-changed) role is
+ * ceo/warehouse — those roles don't use per-capability access.
+ */
 export const updateMember = createServerFn({ method: "POST" })
   .validator(updateMemberSchema)
   .handler(async ({ data }) => {
@@ -427,6 +474,15 @@ export const updateMember = createServerFn({ method: "POST" })
 
     const { db, members } = await import("@/db");
     const { eq } = await import("drizzle-orm");
+
+    let effectiveRole: MemberRole | undefined = data.role;
+    if (data.permissions !== undefined && effectiveRole === undefined) {
+      const existing = await db.query.members.findFirst({
+        where: eq(members.id, data.id),
+        columns: { role: true },
+      });
+      effectiveRole = existing?.role as MemberRole | undefined;
+    }
 
     const set: Record<string, unknown> = { updatedAt: new Date() };
     if (data.name !== undefined) set.name = data.name;
@@ -437,6 +493,10 @@ export const updateMember = createServerFn({ method: "POST" })
     if (data.phone !== undefined) set.phone = data.phone;
     if (data.startedAt !== undefined) set.startedAt = data.startedAt;
     if (data.notes !== undefined) set.notes = data.notes;
+    if (data.permissions !== undefined) {
+      set.permissions =
+        effectiveRole === "ceo" || effectiveRole === "warehouse" ? [] : data.permissions;
+    }
 
     const [row] = await db.update(members).set(set).where(eq(members.id, data.id)).returning();
     if (!row) throw new Error("Member not found");
@@ -448,6 +508,7 @@ export const updateMember = createServerFn({ method: "POST" })
       ...(data.phone !== undefined ? { phone: data.phone } : {}),
       ...(data.startedAt !== undefined ? { startedAt: data.startedAt } : {}),
       ...(data.notes !== undefined ? { notes: data.notes } : {}),
+      ...(data.permissions !== undefined ? { permissions: set.permissions } : {}),
     });
 
     return { id: row.id };
@@ -620,18 +681,19 @@ const recordPaymentSchema = z.object({
 });
 
 /**
- * Manager+: records a weekly payment against a member's outstanding
- * verified-hours balance. Must share a location with the member, or be CEO.
- * Hours paid can never exceed what's currently outstanding.
+ * CEO-only, and only while salary is toggled visible: records a weekly
+ * payment against a member's outstanding verified-hours balance. Hours paid
+ * can never exceed what's currently outstanding.
  */
 export const recordPayment = createServerFn({ method: "POST" })
   .validator(recordPaymentSchema)
   .handler(async ({ data }) => {
-    const { requireManager } = await import("@/lib/auth.server");
-    const { actor, locationIds } = await requireManager();
+    const { requireCeo } = await import("@/lib/auth.server");
+    const actor = await requireCeo();
 
-    const allowed = await actorSharesLocationWithMember(locationIds, data.memberId);
-    if (!allowed) throw new Error("No access to this member");
+    const { getVisibilityFlags } = await import("@/server/settings-flags");
+    const flags = await getVisibilityFlags();
+    if (!flags.salaryVisible) throw new Error("Salary is hidden");
 
     const { db, members, shifts, memberPayments } = await import("@/db");
     const { eq, and } = await import("drizzle-orm");
